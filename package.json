@@ -1,6 +1,6 @@
 {
   "name": "utn-mcp",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Este es el Model Context Protocol server NO OFICIAL de la UTN para buscar informacion o archivos en el aula virtual.",
   "main": "build/index.js",
   "bin": {
@@ -10,10 +10,13 @@
     "build"
   ],
   "scripts": {
+    "prebuild": "node -e \"require('fs').rmSync('build',{recursive:true,force:true})\"",
     "build": "tsc",
+    "prepublishOnly": "npm run build",
     "start": "node build/index.js",
     "dev": "tsx src/index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "login": "tsx src/index.ts login"
   },
   "repository": {
     "type": "git",
@@ -33,12 +36,20 @@
   },
   "homepage": "https://github.com/nialvape/utn-mcp#readme",
   "dependencies": {
+    "@modelcontextprotocol/node": "^2.1.1",
     "@modelcontextprotocol/server": "^2.3.0",
+    "@napi-rs/keyring": "^2.1.0",
+    "express": "^5.2.1",
+    "tough-cookie": "^6.0.2",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^26.6.4",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
