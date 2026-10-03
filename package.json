@@ -4,7 +4,7 @@
   "description": "Este es el Model Context Protocol server NO OFICIAL de la UTN para buscar informacion o archivos en el aula virtual.",
   "main": "build/index.js",
   "bin": {
-    "utn-mcp": "./build/index.js"
+    "utn-mcp": "build/index.js"
   },
   "files": [
     "build"
