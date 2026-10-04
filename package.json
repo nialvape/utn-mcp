@@ -7,12 +7,14 @@
     "utn-mcp": "build/index.js"
   },
   "files": [
-    "build"
+    "build",
+    "vendor"
   ],
   "scripts": {
     "prebuild": "node -e \"require('fs').rmSync('build',{recursive:true,force:true})\"",
     "build": "tsc",
     "prepublishOnly": "npm run build",
+    "prepare": "node scripts/vendor-pdfjs.mjs",
     "start": "node build/index.js",
     "dev": "tsx src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -46,6 +48,7 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.4",
+    "pdfjs-dist": "^6.4.299",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },

@@ -45,3 +45,65 @@ export async function callWs<T>(
         throw new MoodleError(data.message ?? data.exception, data.errorcode);
     }
 }
+
+/**
+ * Baja un archivo de `webservice/pluginfile.php` con el token; lo renueva una vez si venció.
+ * Los errores llegan como JSON (`{ error, errorcode }`) en lugar del archivo.
+ */
+export async function fetchFile(
+    session: AulaSession,
+    url: URL,
+    maxBytes: number,
+): Promise<{ bytes: Uint8Array; contentType: string | null }> {
+    let token = await session.getToken();
+
+    for (let attempt = 0; ; attempt++) {
+        const conToken = new URL(url);
+        conToken.searchParams.set("token", token);
+
+        let res: Response;
+        try {
+            res = await fetch(conToken, { signal: AbortSignal.timeout(60_000) });
+        } catch (e) {
+            throw new MoodleError(`No se pudo bajar el archivo: ${(e as Error).message}`);
+        }
+
+        const contentType = res.headers.get("content-type");
+        if (contentType?.startsWith("application/json")) {
+            const data = (await res.json()) as { error?: string; errorcode?: string };
+            if (attempt === 0 && data.errorcode && TOKEN_ERRORS.has(data.errorcode)) {
+                token = await session.refreshToken();
+                continue;
+            }
+            throw new MoodleError(data.error ?? `HTTP ${res.status}`, data.errorcode);
+        }
+        if (!res.ok || !res.body) throw new MoodleError(`HTTP ${res.status} al bajar el archivo`);
+
+        return { bytes: await leerConLimite(res, maxBytes), contentType };
+    }
+}
+
+/** Lee el cuerpo cortando apenas pasa el límite, sin esperar a bajarlo entero. */
+async function leerConLimite(res: Response, maxBytes: number): Promise<Uint8Array> {
+    const limite = `El archivo pesa más de ${Math.round(maxBytes / 1024 / 1024)} MB; es demasiado para leerlo.`;
+    if (Number(res.headers.get("content-length")) > maxBytes) {
+        await res.body?.cancel();
+        throw new MoodleError(limite);
+    }
+
+    const partes: Uint8Array[] = [];
+    let total = 0;
+    for await (const parte of res.body as unknown as AsyncIterable<Uint8Array>) {
+        total += parte.length;
+        if (total > maxBytes) throw new MoodleError(limite);
+        partes.push(parte);
+    }
+
+    const bytes = new Uint8Array(total);
+    let i = 0;
+    for (const p of partes) {
+        bytes.set(p, i);
+        i += p.length;
+    }
+    return bytes;
+}

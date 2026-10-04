@@ -3,6 +3,7 @@ import * as z from "zod";
 import { getSiteInfo } from "./client/client.js";
 import type { AulaSession } from "./client/session.js";
 import { RAIZ } from "./address.js";
+import { leerArchivo } from "./files.js";
 import { open } from "./navigate.js";
 
 // JSON compacto: indentar estas respuestas cuesta ~25% más de contexto y no se lee mejor.
@@ -56,8 +57,10 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
                 "(`direccion`) y la de un nivel más arriba (`padre`), así que se navega pasando de vuelta una " +
                 "de esas. Para empezar, usar aula_list_courses o la dirección \"/\".\n\n" +
                 "Buscar algo que puede estar en cualquier parte (una fecha de parcial, un aviso) se hace " +
-                "entrando al curso, viendo qué foros tiene y abriendo el que corresponda: el índice de un foro " +
-                "muestra los asuntos sin volcar los mensajes enteros.",
+                "entrando al curso y abriendo lo que corresponda: el índice de un foro muestra los asuntos sin " +
+                "volcar los mensajes enteros, y archivos como un cronograma se leen con aula_read_file.\n\n" +
+                "Los archivos vienen con una `url`, que sirve para leerlos con aula_read_file y también para " +
+                "dársela al usuario si quiere bajarlo: se abre con su sesión del aula.",
             inputSchema: z.object({
                 direccion: z
                     .string()
@@ -79,6 +82,55 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
         async ({ direccion, pagina }) => {
             try {
                 return json(await open(session, direccion, pagina));
+            } catch (e) {
+                return failure(e);
+            }
+        },
+    );
+
+    server.registerTool(
+        "aula_read_file",
+        {
+            description:
+                "Lee un archivo del aula virtual: PDF, Word (docx), PowerPoint (pptx), Excel (xlsx), imágenes y " +
+                "texto. Los PDF escaneados se devuelven como imagen de cada página.\n\n" +
+                "Devuelve el archivo por partes (páginas, diapositivas o fragmentos), tantas como entren en una " +
+                "respuesta. Si quedan más, `siguiente` dice desde cuál pedir; también se puede saltar directo " +
+                "a una parte con `desde`.\n\n" +
+                "Formatos que no sabe leer (.doc, .ppt viejos, .zip, .rar, videos): devuelve un error con la URL " +
+                "para que el usuario lo baje.",
+            inputSchema: z.object({
+                url: z.string().describe("La `url` del archivo tal como la devuelve aula_open."),
+                desde: z
+                    .number()
+                    .int()
+                    .min(1)
+                    .optional()
+                    .describe("Número de página, diapositiva o fragmento desde el cual leer. Por defecto, 1."),
+            }),
+        },
+        async ({ url, desde }) => {
+            try {
+                const { partes, ...lectura } = await leerArchivo(session, url, desde);
+                const etiqueta = (n: number, titulo?: string) =>
+                    `--- ${lectura.unidad} ${n} de ${lectura.total}${titulo ? ` (${titulo})` : ""} ---`;
+                return {
+                    content: [
+                        { type: "text" as const, text: JSON.stringify(lectura) },
+                        ...partes.flatMap((p) =>
+                            "texto" in p
+                                ? [{ type: "text" as const, text: `${etiqueta(p.numero, p.titulo)}\n${p.texto}` }]
+                                : [
+                                      { type: "text" as const, text: etiqueta(p.numero, p.titulo) },
+                                      {
+                                          type: "image" as const,
+                                          data: Buffer.from(p.imagen).toString("base64"),
+                                          mimeType: p.mimeType,
+                                      },
+                                  ],
+                        ),
+                    ],
+                };
             } catch (e) {
                 return failure(e);
             }

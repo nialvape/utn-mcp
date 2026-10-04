@@ -8,6 +8,7 @@ import {
     POR_PAGINA,
 } from "./client/client.js";
 import type { AulaSession } from "./client/session.js";
+import { urlParaUsuario } from "./files.js";
 import type { CourseModule, CourseSection } from "./types.js";
 
 const isoDate = (seconds: number | null | undefined) => (seconds ? new Date(seconds * 1000).toISOString() : null);
@@ -161,6 +162,7 @@ function toFile(f: { filename: string; filepath?: string | null; filesize: numbe
         tamanio: f.filesize,
         mimetype: f.mimetype,
         modificado: isoDate(f.timemodified),
-        url: f.fileurl,
+        // Sirve para pasársela al usuario y también para leerlo con aula_read_file.
+        url: urlParaUsuario(f.fileurl),
     };
 }

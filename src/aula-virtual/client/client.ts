@@ -2,11 +2,6 @@ import { callWs } from "./moodle-api.js";
 import type { AulaSession } from "./session.js";
 import type { Course, CourseSection, ForumDiscussion, ForumPost, SiteInfo } from "../types.js";
 
-/**
- * Llamadas al web service de Moodle. Devuelven lo que manda Moodle, con sus nombres y sus ids:
- * darle forma a eso para el modelo es tarea de navigate.ts.
- */
-
 export function getSiteInfo(session: AulaSession): Promise<SiteInfo> {
     return callWs<SiteInfo>(session, "core_webservice_get_site_info");
 }
