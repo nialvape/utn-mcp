@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/server";
-import { getSiteInfo, listCourses } from "./client/client.js";
+import * as z from "zod";
+import { getCourseContents, getSiteInfo, listCourses } from "./client/client.js";
 import type { AulaSession } from "./client/session.js";
 
 const json = (data: unknown) => ({
@@ -31,6 +32,26 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
         async () => {
             try {
                 return json(await listCourses(session));
+            } catch (e) {
+                return failure(e);
+            }
+        },
+    );
+
+    server.registerTool(
+        "aula_get_course_contents",
+        {
+            description:
+                "Contenido de un curso del aula virtual: secciones (unidades/semanas) con sus actividades " +
+                "(archivos, links, foros, tareas, etc.), fechas y archivos adjuntos. " +
+                "El id del curso sale de aula_list_courses.",
+            inputSchema: z.object({
+                courseId: z.number().int().positive().describe("id del curso, de aula_list_courses"),
+            }),
+        },
+        async ({ courseId }) => {
+            try {
+                return json(await getCourseContents(session, courseId));
             } catch (e) {
                 return failure(e);
             }

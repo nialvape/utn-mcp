@@ -9,11 +9,6 @@ const asMiddleware = (guard: Guard): RequestHandler => (req, res, next) => {
     if (guard(req, res)) next();
 };
 
-/**
- * Entrada HTTP local: solo escucha en 127.0.0.1 y rechaza Host/Origin que no sean
- * localhost, para que una página web no pueda usar tu sesión de la UTN (DNS rebinding).
- * El modo hosteado va a reutilizar el mismo `factory`, con OAuth y una sesión por usuario.
- */
 export function startHttpServer(factory: McpServerFactory, port: number) {
     const handler = createMcpHandler(factory, { onerror: (e) => logger.error(e.message) });
 
