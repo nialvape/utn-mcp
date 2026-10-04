@@ -14,3 +14,9 @@ export function htmlToText(html: string | undefined): string {
         .replace(/\s*\n\s*/g, "\n")
         .trim();
 }
+
+/** Como htmlToText pero recortado: para índices, donde solo hace falta decidir si entrar. */
+export function htmlToSnippet(html: string | undefined, max = 200): string {
+    const texto = htmlToText(html);
+    return texto.length > max ? `${texto.slice(0, max).trimEnd()}…` : texto;
+}

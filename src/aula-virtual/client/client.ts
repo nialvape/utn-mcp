@@ -1,66 +1,52 @@
-import { htmlToText } from "../../shared/html.js";
 import { callWs } from "./moodle-api.js";
 import type { AulaSession } from "./session.js";
-import type { Course, CourseModule, CourseSection, SiteInfo } from "../types.js";
+import type { Course, CourseSection, ForumDiscussion, ForumPost, SiteInfo } from "../types.js";
 
-const isoDate = (seconds: number | null | undefined) => (seconds ? new Date(seconds * 1000).toISOString() : null);
+/**
+ * Llamadas al web service de Moodle. Devuelven lo que manda Moodle, con sus nombres y sus ids:
+ * darle forma a eso para el modelo es tarea de navigate.ts.
+ */
 
 export function getSiteInfo(session: AulaSession): Promise<SiteInfo> {
     return callWs<SiteInfo>(session, "core_webservice_get_site_info");
 }
 
-export async function listCourses(session: AulaSession) {
+export async function getUserCourses(session: AulaSession): Promise<Course[]> {
     const { userid } = await getSiteInfo(session);
-    const courses = await callWs<Course[]>(session, "core_enrol_get_users_courses", { userid });
-    return courses.map((c) => ({
-        id: c.id,
-        nombre: c.fullname,
-        nombreCorto: c.shortname,
-        visible: c.visible === 1,
-        progreso: c.progress ?? null,
-        ultimoAcceso: isoDate(c.lastaccess),
-    }));
+    return callWs<Course[]>(session, "core_enrol_get_users_courses", { userid });
 }
 
-/** Secciones de un curso con sus actividades y archivos. Omite lo que el usuario no puede ver. */
-export async function getCourseContents(session: AulaSession, courseid: number) {
-    const sections = await callWs<CourseSection[]>(session, "core_course_get_contents", { courseid });
-    return sections
-        .filter((s) => s.uservisible !== false)
-        .map((s) => ({
-            id: s.id,
-            numero: s.section,
-            nombre: s.name,
-            resumen: htmlToText(s.summary) || undefined,
-            actividades: s.modules.filter((m) => m.uservisible).map(toActivity),
-        }))
-        .filter((s) => s.resumen || s.actividades.length > 0);
+/**
+ * Secciones del curso con sus módulos. Con `cmid` Moodle devuelve igual todas las secciones
+ * pero solo popula el módulo pedido, así que no hay que traerse el curso entero para abrir una cosa.
+ */
+export function getCourseSections(session: AulaSession, courseId: number, cmid?: number): Promise<CourseSection[]> {
+    const params: Record<string, string | number> = { courseid: courseId };
+    if (cmid !== undefined) {
+        params["options[0][name]"] = "cmid";
+        params["options[0][value]"] = cmid;
+    }
+    return callWs<CourseSection[]>(session, "core_course_get_contents", params);
 }
 
-function toActivity(m: CourseModule) {
-    const contents = m.contents ?? [];
-    const files = contents.filter((c) => c.type === "file");
-    const links = contents.filter((c) => c.type === "url");
-    return {
-        id: m.id,
-        nombre: m.name,
-        tipo: m.modname,
-        url: m.url,
-        descripcion: htmlToText(m.description) || undefined,
-        restriccion: htmlToText(m.availabilityinfo) || undefined,
-        fechas: m.dates?.length
-            ? m.dates.map((d) => ({ etiqueta: d.label, fecha: isoDate(d.timestamp) }))
-            : undefined,
-        archivos: files.length
-            ? files.map((f) => ({
-                  nombre: f.filename,
-                  ruta: f.filepath,
-                  tamanio: f.filesize,
-                  mimetype: f.mimetype,
-                  modificado: isoDate(f.timemodified),
-                  url: f.fileurl,
-              }))
-            : undefined,
-        enlaces: links.length ? links.map((l) => l.fileurl) : undefined,
-    };
+// --- Foros ---
+
+/** Cuántas discusiones trae una página del índice de un foro. */
+export const POR_PAGINA = 50;
+
+/**
+ * Discusiones de un foro, las más recientes primero. Moodle manda el mensaje completo de la
+ * primera publicación de cada una; el que lee decide si lo recorta.
+ */
+export function getForumDiscussions(
+    session: AulaSession,
+    forumid: number,
+    page = 0,
+): Promise<{ discussions: ForumDiscussion[] }> {
+    return callWs(session, "mod_forum_get_forum_discussions", { forumid, page, perpage: POR_PAGINA });
+}
+
+/** Publicaciones de una discusión, incluidas las respuestas. */
+export function getDiscussionPosts(session: AulaSession, discussionid: number): Promise<{ posts: ForumPost[] }> {
+    return callWs(session, "mod_forum_get_discussion_posts", { discussionid });
 }

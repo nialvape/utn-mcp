@@ -32,6 +32,8 @@ export interface CourseModule {
     id: number;
     name: string;
     modname: string;
+    /** id del plugin, no del módulo: es lo que piden las funciones mod_* (p. ej. forumid). */
+    instance: number;
     url?: string;
     description?: string;
     uservisible: boolean;
@@ -47,4 +49,28 @@ export interface CourseSection {
     summary: string;
     uservisible?: boolean;
     modules: CourseModule[];
+}
+
+export interface ForumDiscussion {
+    /** id de la discusión; es el que pide mod_forum_get_discussion_posts. */
+    discussion: number;
+    subject: string;
+    message: string;
+    userfullname: string;
+    created: number;
+    timemodified: number;
+    numreplies: number;
+    pinned: boolean;
+    attachment: boolean;
+}
+
+export interface ForumPost {
+    id: number;
+    subject: string;
+    message: string;
+    author: { fullname: string };
+    timecreated: number;
+    parentid: number | null;
+    isdeleted: boolean;
+    attachments: { filename: string; fileurl: string; filesize: number; mimetype?: string }[];
 }

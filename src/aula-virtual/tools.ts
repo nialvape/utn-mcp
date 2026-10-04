@@ -1,10 +1,13 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod";
-import { getCourseContents, getSiteInfo, listCourses } from "./client/client.js";
+import { getSiteInfo } from "./client/client.js";
 import type { AulaSession } from "./client/session.js";
+import { RAIZ } from "./address.js";
+import { open } from "./navigate.js";
 
+// JSON compacto: indentar estas respuestas cuesta ~25% más de contexto y no se lee mejor.
 const json = (data: unknown) => ({
-    content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+    content: [{ type: "text" as const, text: JSON.stringify(data) }],
 });
 
 const failure = (e: unknown) => ({
@@ -28,10 +31,14 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
 
     server.registerTool(
         "aula_list_courses",
-        { description: "Lista los cursos (materias) en los que está inscripto el usuario en el aula virtual." },
+        {
+            description:
+                "Lista los cursos (materias) en los que está inscripto el usuario. Es el punto de entrada: " +
+                "cada curso viene con su `direccion`, que se le pasa a aula_open para entrar.",
+        },
         async () => {
             try {
-                return json(await listCourses(session));
+                return json(await open(session, RAIZ));
             } catch (e) {
                 return failure(e);
             }
@@ -39,19 +46,39 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
     );
 
     server.registerTool(
-        "aula_get_course_contents",
+        "aula_open",
         {
             description:
-                "Contenido de un curso del aula virtual: secciones (unidades/semanas) con sus actividades " +
-                "(archivos, links, foros, tareas, etc.), fechas y archivos adjuntos. " +
-                "El id del curso sale de aula_list_courses.",
+                "Entra a una dirección del aula virtual y devuelve lo que hay ahí: un curso con sus secciones " +
+                "y módulos, un módulo con sus archivos y fechas, un foro con el índice de sus discusiones, o " +
+                "una discusión con sus mensajes completos.\n\n" +
+                "No hace falta armar la dirección: cada respuesta trae las direcciones de lo que hay adentro " +
+                "(`direccion`) y la de un nivel más arriba (`padre`), así que se navega pasando de vuelta una " +
+                "de esas. Para empezar, usar aula_list_courses o la dirección \"/\".\n\n" +
+                "Buscar algo que puede estar en cualquier parte (una fecha de parcial, un aviso) se hace " +
+                "entrando al curso, viendo qué foros tiene y abriendo el que corresponda: el índice de un foro " +
+                "muestra los asuntos sin volcar los mensajes enteros.",
             inputSchema: z.object({
-                courseId: z.number().int().positive().describe("id del curso, de aula_list_courses"),
+                direccion: z
+                    .string()
+                    .describe(
+                        'Dirección a abrir, sacada de una respuesta anterior. Ej: "/", "/curso/691", ' +
+                            '"/curso/691/mod/34806", "/curso/691/mod/34806/disc/421348".',
+                    ),
+                pagina: z
+                    .number()
+                    .int()
+                    .min(0)
+                    .optional()
+                    .describe(
+                        "Solo para foros: página del índice de discusiones, de 50 en 50. La respuesta avisa " +
+                            "con `hayMasDiscusiones` cuando hay otra.",
+                    ),
             }),
         },
-        async ({ courseId }) => {
+        async ({ direccion, pagina }) => {
             try {
-                return json(await getCourseContents(session, courseId));
+                return json(await open(session, direccion, pagina));
             } catch (e) {
                 return failure(e);
             }
