@@ -52,7 +52,50 @@ claude mcp add utn -- npx -y utn-mcp
 ```
 En Windows, si no arranca, usá `"command": "cmd"` y `"args": ["/c", "npx", "-y", "utn-mcp"]`. Después reiniciá Claude Desktop por completo.
 
-**Otros clientes (Cursor, VS Code, etc.)**: cualquier cliente MCP que lance servidores por STDIO sirve con el comando `npx -y utn-mcp`.
+**Codex**
+```bash
+codex mcp add utn -- npx -y utn-mcp
+```
+
+**Gemini CLI**
+```bash
+gemini mcp add utn npx -y utn-mcp
+```
+
+**OpenClaw**
+```bash
+openclaw mcp add utn --command npx --arg -y --arg utn-mcp
+```
+
+**Hermes**: en `~/.hermes/config.yaml`:
+```yaml
+mcp_servers:
+  utn:
+    command: "npx"
+    args: ["-y", "utn-mcp"]
+```
+
+**Cursor**: en `~/.cursor/mcp.json`:
+```json
+{
+  "mcpServers": {
+    "utn": { "command": "npx", "args": ["-y", "utn-mcp"] }
+  }
+}
+```
+
+**VS Code**: en `.vscode/mcp.json` (o con *MCP: Add Server* desde la paleta de comandos):
+```json
+{
+  "servers": {
+    "utn": { "type": "stdio", "command": "npx", "args": ["-y", "utn-mcp"] }
+  }
+}
+```
+
+**ChatGPT**: todavía no. ChatGPT sólo se conecta a servidores MCP remotos por HTTPS, y utn-mcp corre en tu computadora. Va a funcionar con la versión hosteada.
+
+**Otros clientes (Windsurf, opencode, etc.)**: cualquier cliente MCP que lance servidores por STDIO sirve con el comando `npx -y utn-mcp`.
 
 ### Instalación global (opcional)
 Si preferís tener el comando `utn-mcp` siempre disponible:

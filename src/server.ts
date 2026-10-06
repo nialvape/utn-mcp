@@ -6,7 +6,7 @@ import { registerAulaVirtualTools } from "./aula-virtual/tools.js";
 export function createServer(aula: AulaSession): McpServer {
     const server = new McpServer({
         name: "UTN-MCP",
-        version: "0.2.0",
+        version: "0.2.1",
     });
 
     registerAulaVirtualTools(server, aula);
