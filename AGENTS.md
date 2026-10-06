@@ -1,59 +1,59 @@
 # utn-mcp
 
-Servidor MCP que le da a un agente acceso a los sistemas de la UTN FRBA. Corre local por STDIO (`npx utn-mcp`) y va a correr hosteado y multiusuario en utnmcp.com.ar. Lo que hay hoy funciona bien: para algo nuevo, copiá cómo está hecho `src/aula-virtual/`.
+MCP server that gives an agent access to UTN FRBA's systems. It runs locally over STDIO (`npx utn-mcp`) and will run hosted and multi-user at utnmcp.com.ar. What exists today works well: for something new, copy how `src/aula-virtual/` is built.
 
-## Distribución de módulos
+## Module layout
 
 ```
 src/
-  index.ts          CLI: elige STDIO, --http o `login`
-  http.ts           entrada HTTP
-  server.ts         createServer(session): registra las tools de cada plataforma
-  shared/           lo que sirve a más de una plataforma (http, html, documents, logger, paths, input)
-  <plataforma>/
-    tools.ts        registro de las tools MCP
-    client/         habla con la plataforma: sesión, login, requests, tipos de sus respuestas
-    format/         arma lo que ve el modelo, usando el cliente
-    login.ts        el subcomando `utn-mcp login` de esa plataforma
+  index.ts          CLI: picks STDIO, --http or `login`
+  http.ts           HTTP entry point
+  server.ts         createServer(session): registers each platform's tools
+  shared/           what serves more than one platform (http, html, documents, logger, paths, input)
+  <platform>/
+    tools.ts        MCP tool registration
+    client/         talks to the platform: session, login, requests, types of its responses
+    format/         builds what the model sees, using the client
+    login.ts        that platform's `utn-mcp login` subcommand
 ```
 
-Cada capa tiene un solo trabajo y las dependencias van en una sola dirección: `tools.ts` → `format/` → `client/` → `shared/`.
+Each layer has a single job and dependencies go in one direction only: `tools.ts` → `format/` → `client/` → `shared/`.
 
-- **`tools.ts`** exporta `register<Plataforma>Tools(server, session)`. Cada tool es nombre, descripción, schema zod y una llamada a `format/`. La lógica va en las otras capas.
-- **`client/`** conoce la plataforma y nada más: no importa de MCP ni sabe que existe un modelo. Expone funciones finas sobre la API (`getCourseSections`, `callWs`, `fetchFile`) y en `types.ts` tipa solo los campos que usamos. Si el cliente es chico, alcanza con un solo `client.ts`.
-- **`format/`** decide qué ve el modelo y cuánto le cuesta: direcciones de navegación, recortes, fechas, presupuestos de texto, paginación.
-- Las plataformas no se importan entre sí. Lo que compartan va a `shared/`.
-- Para agregar una plataforma: creá la carpeta con esta forma y sumá una línea en `server.ts`.
+- **`tools.ts`** exports `register<Platform>Tools(server, session)`. Each tool is a name, a description, a zod schema and a call into `format/`. Logic goes in the other layers.
+- **`client/`** knows the platform and nothing else: it doesn't import from MCP or know a model exists. It exposes thin functions over the API (`getCourseSections`, `callWs`, `fetchFile`) and in `types.ts` types only the fields we use. If the client is small, a single `client.ts` is enough.
+- **`format/`** decides what the model sees and how much it costs: navigation addresses, truncation, dates, text budgets, pagination.
+- Platforms don't import from each other. Whatever they share goes in `shared/`.
+- To add a platform: create the folder with this shape and add one line to `server.ts`.
 
-## Sesión y multiusuario
+## Session and multi-user
 
-El servidor va a atender a muchos alumnos a la vez, así que el estado de autenticación nunca es global. Cada función que toca la plataforma recibe la sesión del usuario como primer parámetro (`AulaSession`), y `createServer` la recibe de afuera. `LocalSession` es la implementación del modo local; el modo hosteado va a tener la suya.
+The server will serve many students at once, so authentication state is never global. Every function that touches the platform receives the user's session as its first parameter (`AulaSession`), and `createServer` receives it from outside. `LocalSession` is the local-mode implementation; hosted mode will have its own.
 
-El token del usuario no sale nunca del servidor. Al modelo y al usuario les llegan URLs que se abren con la sesión del navegador (`urlParaUsuario`). Antes de mandar el token a una URL que vino del modelo, validá que sea de la plataforma (`urlDeDescarga`).
+The user's token never leaves the server. The model and the user get URLs that open with the browser session (`urlParaUsuario`). Before sending the token to a URL that came from the model, validate that it belongs to the platform (`urlDeDescarga`).
 
-## Diseño de las tools
+## Tool design
 
-- **Nombres**: `<plataforma>_<acción>` en snake_case (`aula_open`, `aula_read_file`).
-- **Descripciones**: en castellano y escritas para el modelo. Dicen cuándo usar la tool, de dónde sale cada parámetro (otra respuesta, otra tool) y qué campos de la respuesta sirven para seguir. Cada `.describe()` de zod trae un ejemplo concreto.
-- **Navegación sin estado**: cada respuesta trae la `direccion` de lo que hay adentro y el `padre`. El modelo navega devolviendo direcciones; nunca tiene que armarlas.
-- **Índices resumidos, detalle al abrir**: un listado muestra lo justo para decidir si entrar (`htmlToSnippet`) y el contenido completo se ve al abrir el elemento.
-- **Presupuesto por respuesta**: lo que puede ser largo se corta con un presupuesto y avisa cómo seguir (`siguiente`, `hayMasDiscusiones`).
-- **Respuestas**: JSON compacto mediante `json()` y errores con `failure()`. Cada handler es `try { return json(...) } catch (e) { return failure(e) }`.
+- **Names**: `<platform>_<action>` in snake_case (`aula_open`, `aula_read_file`).
+- **Descriptions**: in Spanish and written for the model. They say when to use the tool, where each parameter comes from (another response, another tool) and which response fields are useful to continue. Every zod `.describe()` includes a concrete example.
+- **Stateless navigation**: each response carries the `direccion` of what's inside and the `padre`. The model navigates by passing addresses back; it never has to build them.
+- **Summarized indexes, detail on open**: a listing shows just enough to decide whether to go in (`htmlToSnippet`) and the full content is shown when the item is opened.
+- **Per-response budget**: anything that can be long is cut with a budget and says how to continue (`siguiente`, `hayMasDiscusiones`).
+- **Responses**: compact JSON via `json()` and errors via `failure()`. Every handler is `try { return json(...) } catch (e) { return failure(e) }`.
 
-## Convenciones de código
+## Code conventions
 
-- **Campos de respuesta** en castellano y camelCase (`ultimoAcceso`, `nombreCorto`). Un campo vacío se omite con `|| undefined`, así no ocupa lugar en el JSON. Las fechas van en ISO (`isoDate`).
-- **Idioma de los identificadores**: `client/` usa el vocabulario de la plataforma, en inglés (`getUserCourses`, `courseId`); `format/` y `shared/documents` están en castellano (`leerArchivo`, `verCurso`). Seguí el idioma de los archivos vecinos.
-- **Texto para personas y para el modelo** (comentarios, errores, descripciones, logs) en castellano rioplatense con voseo: "corré `utn-mcp login`", "No tenés acceso al módulo".
-- **Errores accionables**: el mensaje dice qué hacer después. Por ejemplo, los formatos válidos de una dirección, el comando de login o la URL para bajar el archivo. Los errores propios son clases con `name` (`MoodleError`, `LoginRequiredError`).
-- **Comentarios**: JSDoc de una línea, o poco más, que explica el porqué o un dato de la plataforma ("Con `cmid` Moodle devuelve igual todas las secciones…"). Las constantes llevan su unidad o su origen.
-- **Logs**: siempre con `logger` de `shared/logger.ts`. Escribe a stderr porque stdout es el canal STDIO del protocolo.
-- **Imports**: ESM con extensión `.js` (`./client/client.js`), por `module: Node16`.
-- **Token de Moodle**: el flujo se describe como "flujo de launch.php" o "token del web service". El identificador `moodle_mobile_app` queda tal cual, porque es el nombre real del servicio.
-- **pdf.js**: se carga desde `vendor/pdfjs/` (lo genera `scripts/vendor-pdfjs.mjs`). `pdfjs-dist` es devDependency y se importa solo para tipos.
+- **Response fields** in Spanish and camelCase (`ultimoAcceso`, `nombreCorto`). An empty field is omitted with `|| undefined`, so it takes no space in the JSON. Dates are ISO (`isoDate`).
+- **Identifier language**: `client/` uses the platform's vocabulary, in English (`getUserCourses`, `courseId`); `format/` and `shared/documents` are in Spanish (`leerArchivo`, `verCurso`). Follow the language of the neighboring files.
+- **Text for people and for the model** (comments, errors, descriptions, logs) in Rioplatense Spanish with voseo: "corré `utn-mcp login`", "No tenés acceso al módulo".
+- **Actionable errors**: the message says what to do next. For example, the valid address formats, the login command or the URL to download the file. Our own errors are classes with a `name` (`MoodleError`, `LoginRequiredError`).
+- **Comments**: one-line JSDoc, or a little more, explaining the why or a platform fact ("Con `cmid` Moodle devuelve igual todas las secciones…"). Constants state their unit or their origin.
+- **Logs**: always through `logger` from `shared/logger.ts`. It writes to stderr because stdout is the protocol's STDIO channel.
+- **Imports**: ESM with the `.js` extension (`./client/client.js`), because of `module: Node16`.
+- **Moodle token**: the flow is described as the "launch.php flow" or "web service token". The `moodle_mobile_app` identifier stays as is, because it's the service's real name.
+- **pdf.js**: loaded from `vendor/pdfjs/` (generated by `scripts/vendor-pdfjs.mjs`). `pdfjs-dist` is a devDependency and is imported for types only.
 
-## Verificar y publicar
+## Verify and publish
 
-- No hay tests. Verificá con `npx tsc --noEmit` y probá contra el aula real con `npm run dev` (hace falta `npm run login` una vez).
-- Cuando agregues o cambies una tool, actualizá la tabla de tools del `README.md`.
-- La versión está en dos lugares: `package.json` y el `version` de `src/server.ts`. Se suben juntas.
+- There are no tests. Verify with `npx tsc --noEmit` and try it against the real aula with `npm run dev` (requires `npm run login` once).
+- When you add or change a tool, update the tools table in `README.md`.
+- The version lives in two places: `package.json` and the `version` in `src/server.ts`. They are bumped together.
