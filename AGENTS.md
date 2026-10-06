@@ -29,7 +29,7 @@ Each layer has a single job and dependencies go in one direction only: `tools.ts
 
 The server will serve many students at once, so authentication state is never global. Every function that touches the platform receives the user's session as its first parameter (`AulaSession`), and `createServer` receives it from outside. `LocalSession` is the local-mode implementation; hosted mode will have its own.
 
-The user's token never leaves the server. The model and the user get URLs that open with the browser session (`urlParaUsuario`). Before sending the token to a URL that came from the model, validate that it belongs to the platform (`urlDeDescarga`).
+The user's token never leaves the server. The model and the user get URLs that open with the browser session (`userFacingUrl`). Before sending the token to a URL that came from the model, validate that it belongs to the platform (`downloadUrl`).
 
 ## Tool design
 
@@ -43,7 +43,7 @@ The user's token never leaves the server. The model and the user get URLs that o
 ## Code conventions
 
 - **Response fields** in Spanish and camelCase (`ultimoAcceso`, `nombreCorto`). An empty field is omitted with `|| undefined`, so it takes no space in the JSON. Dates are ISO (`isoDate`).
-- **Identifier language**: `client/` uses the platform's vocabulary, in English (`getUserCourses`, `courseId`); `format/` and `shared/documents` are in Spanish (`leerArchivo`, `verCurso`). Follow the language of the neighboring files.
+- **Identifier language**: all code identifiers are in English: variables, functions, types, constants and file names (`getUserCourses`, `viewCourse`, `readAulaFile`, `format/activities.ts`). In `client/` they follow the platform's vocabulary (`courseId`, `cmid`). What the model sees stays in Spanish: response fields, tool parameters and string values (`direccion`, `ultimoAcceso`, the `unidad` "página"). When an object's keys reach the model, they stay in Spanish even inside internal code (`FileRead`).
 - **Text for people and for the model** (comments, errors, descriptions, logs) in Rioplatense Spanish with voseo: "corré `utn-mcp login`", "No tenés acceso al módulo".
 - **Actionable errors**: the message says what to do next. For example, the valid address formats, the login command or the URL to download the file. Our own errors are classes with a `name` (`MoodleError`, `LoginRequiredError`).
 - **Comments**: one-line JSDoc, or a little more, explaining the why or a platform fact ("Con `cmid` Moodle devuelve igual todas las secciones…"). Constants state their unit or their origin.
