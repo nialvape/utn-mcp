@@ -1,6 +1,6 @@
 {
   "name": "utn-mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Este es el Model Context Protocol server NO OFICIAL de la UTN para buscar informacion o archivos en el aula virtual.",
   "main": "build/index.js",
   "bin": {
@@ -36,7 +36,7 @@
   "bugs": {
     "url": "https://github.com/nialvape/utn-mcp/issues"
   },
-  "homepage": "https://github.com/nialvape/utn-mcp#readme",
+  "homepage": "https://utnmcp.com.ar",
   "dependencies": {
     "@modelcontextprotocol/node": "^2.1.1",
     "@modelcontextprotocol/server": "^2.3.0",
