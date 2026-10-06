@@ -1,6 +1,6 @@
 import { callWs } from "./moodle-api.js";
 import type { AulaSession } from "./session.js";
-import type { Course, CourseSection, ForumDiscussion, ForumPost, SiteInfo } from "../types.js";
+import type { Course, CourseSection, ForumDiscussion, ForumPost, SiteInfo } from "./types.js";
 
 export function getSiteInfo(session: AulaSession): Promise<SiteInfo> {
     return callWs<SiteInfo>(session, "core_webservice_get_site_info");

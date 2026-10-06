@@ -1,7 +1,7 @@
-import { abrirDocumento, FormatoNoSoportado, type Parte } from "../shared/documents/index.js";
-import { AULA_BASE_URL } from "./client/constants.js";
-import { fetchFile } from "./client/moodle-api.js";
-import type { AulaSession } from "./client/session.js";
+import { abrirDocumento, FormatoNoSoportado, type Parte } from "../../shared/documents/index.js";
+import { AULA_BASE_URL } from "../client/constants.js";
+import { fetchFile } from "../client/moodle-api.js";
+import type { AulaSession } from "../client/session.js";
 
 const ORIGEN = new URL(AULA_BASE_URL).origin;
 const RUTA_WS = "/webservice/pluginfile.php/";

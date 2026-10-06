@@ -1,4 +1,4 @@
-import { htmlToSnippet, htmlToText } from "../shared/html.js";
+import { htmlToSnippet, htmlToText } from "../../shared/html.js";
 import { cursoAddr, discusionAddr, moduloAddr, padre, parseAddress, RAIZ, type Address } from "./address.js";
 import {
     getCourseSections,
@@ -6,10 +6,10 @@ import {
     getForumDiscussions,
     getUserCourses,
     POR_PAGINA,
-} from "./client/client.js";
-import type { AulaSession } from "./client/session.js";
+} from "../client/client.js";
+import type { AulaSession } from "../client/session.js";
 import { urlParaUsuario } from "./files.js";
-import type { CourseModule, CourseSection } from "./types.js";
+import type { CourseModule, CourseSection } from "../client/types.js";
 
 const isoDate = (seconds: number | null | undefined) => (seconds ? new Date(seconds * 1000).toISOString() : null);
 

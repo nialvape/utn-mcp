@@ -2,9 +2,9 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod";
 import { getSiteInfo } from "./client/client.js";
 import type { AulaSession } from "./client/session.js";
-import { RAIZ } from "./address.js";
-import { leerArchivo } from "./files.js";
-import { open } from "./navigate.js";
+import { RAIZ } from "./format/address.js";
+import { leerArchivo } from "./format/files.js";
+import { open } from "./format/navigate.js";
 
 // JSON compacto: indentar estas respuestas cuesta ~25% más de contexto y no se lee mejor.
 const json = (data: unknown) => ({
