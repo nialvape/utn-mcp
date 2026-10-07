@@ -5,85 +5,87 @@ import { inflateRawSync } from "node:zlib";
  * del archivo y descomprime las entradas pedidas. Sin zip64 ni cifrado, que Office no usa.
  */
 
-export interface EntradaZip {
-    nombre: string;
-    metodo: number;
-    comprimido: number;
-    tamanio: number;
+export interface ZipEntry {
+    name: string;
+    method: number;
+    compressedSize: number;
+    size: number;
     /** Dónde empieza el encabezado local de la entrada. */
     offset: number;
 }
 
-const FIN_DIRECTORIO = 0x06054b50;
-const DIRECTORIO = 0x02014b50;
-const ENCABEZADO_LOCAL = 0x04034b50;
-const SIN_COMPRESION = 0;
+const END_OF_CENTRAL_DIRECTORY = 0x06054b50;
+const CENTRAL_DIRECTORY_ENTRY = 0x02014b50;
+const LOCAL_HEADER = 0x04034b50;
+const STORED = 0;
 const DEFLATE = 8;
 
-class ZipInvalido extends Error {
-    constructor(detalle: string) {
-        super(`El archivo no es un zip válido: ${detalle}.`);
-        this.name = "ZipInvalido";
+class InvalidZip extends Error {
+    constructor(detail: string) {
+        super(`El archivo no es un zip válido: ${detail}.`);
+        this.name = "InvalidZip";
     }
 }
 
-export function listarZip(bytes: Uint8Array): EntradaZip[] {
-    const vista = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+export function listZip(bytes: Uint8Array): ZipEntry[] {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 
     // El fin del directorio está al final, seguido de un comentario opcional de hasta 64 KB.
-    let fin = -1;
+    let end = -1;
     for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 22 - 0xffff); i--) {
-        if (vista.getUint32(i, true) === FIN_DIRECTORIO) {
-            fin = i;
+        if (view.getUint32(i, true) === END_OF_CENTRAL_DIRECTORY) {
+            end = i;
             break;
         }
     }
-    if (fin < 0) throw new ZipInvalido("no tiene índice");
+    if (end < 0) throw new InvalidZip("no tiene índice");
 
-    const cantidad = vista.getUint16(fin + 10, true);
-    let p = vista.getUint32(fin + 16, true);
-    if (cantidad === 0xffff || p === 0xffffffff) throw new ZipInvalido("usa zip64");
+    const count = view.getUint16(end + 10, true);
+    let p = view.getUint32(end + 16, true);
+    if (count === 0xffff || p === 0xffffffff) throw new InvalidZip("usa zip64");
 
-    const entradas: EntradaZip[] = [];
-    const nombres = new TextDecoder();
-    for (let i = 0; i < cantidad; i++) {
-        if (p + 46 > bytes.length || vista.getUint32(p, true) !== DIRECTORIO) throw new ZipInvalido("índice corrupto");
-        const largoNombre = vista.getUint16(p + 28, true);
-        entradas.push({
-            nombre: nombres.decode(bytes.subarray(p + 46, p + 46 + largoNombre)),
-            metodo: vista.getUint16(p + 10, true),
-            comprimido: vista.getUint32(p + 20, true),
-            tamanio: vista.getUint32(p + 24, true),
-            offset: vista.getUint32(p + 42, true),
+    const entries: ZipEntry[] = [];
+    const decoder = new TextDecoder();
+    for (let i = 0; i < count; i++) {
+        if (p + 46 > bytes.length || view.getUint32(p, true) !== CENTRAL_DIRECTORY_ENTRY) {
+            throw new InvalidZip("índice corrupto");
+        }
+        const nameLength = view.getUint16(p + 28, true);
+        entries.push({
+            name: decoder.decode(bytes.subarray(p + 46, p + 46 + nameLength)),
+            method: view.getUint16(p + 10, true),
+            compressedSize: view.getUint32(p + 20, true),
+            size: view.getUint32(p + 24, true),
+            offset: view.getUint32(p + 42, true),
         });
-        p += 46 + largoNombre + vista.getUint16(p + 30, true) + vista.getUint16(p + 32, true);
+        p += 46 + nameLength + view.getUint16(p + 30, true) + view.getUint16(p + 32, true);
     }
-    return entradas;
+    return entries;
 }
 
 /**
  * Descomprime una entrada. `max` corta aunque el índice mienta sobre el tamaño: un zip chico que se
  * infla a gigas es un ataque conocido.
  */
-export function leerEntrada(bytes: Uint8Array, entrada: EntradaZip, max: number): Uint8Array {
-    if (entrada.tamanio > max) throw new ZipInvalido(`"${entrada.nombre}" descomprimido pesa demasiado`);
+export function readEntry(bytes: Uint8Array, entry: ZipEntry, max: number): Uint8Array {
+    if (entry.size > max) throw new InvalidZip(`"${entry.name}" descomprimido pesa demasiado`);
 
-    const vista = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const p = entrada.offset;
-    if (vista.getUint32(p, true) !== ENCABEZADO_LOCAL) throw new ZipInvalido(`falta el encabezado de "${entrada.nombre}"`);
-    const inicio = p + 30 + vista.getUint16(p + 26, true) + vista.getUint16(p + 28, true);
-    const datos = bytes.subarray(inicio, inicio + entrada.comprimido);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const p = entry.offset;
+    if (view.getUint32(p, true) !== LOCAL_HEADER) throw new InvalidZip(`falta el encabezado de "${entry.name}"`);
+    const start = p + 30 + view.getUint16(p + 26, true) + view.getUint16(p + 28, true);
+    const data = bytes.subarray(start, start + entry.compressedSize);
 
-    switch (entrada.metodo) {
-        case SIN_COMPRESION:
-            return datos;
+    switch (entry.method) {
+        case STORED:
+            return data;
         case DEFLATE:
             try {
-                return inflateRawSync(datos, { maxOutputLength: max });
+                return inflateRawSync(data, { maxOutputLength: max });
             } catch (e) {
-                throw new ZipInvalido(`no se pudo descomprimir "${entrada.nombre}" (${(e as Error).message})`);
+                throw new InvalidZip(`no se pudo descomprimir "${entry.name}" (${(e as Error).message})`);
             }
         default:
-            throw new ZipInvalido(`"${entrada.nombre}" usa una compresión no soportada (${entrada.metodo})`);
+            throw new InvalidZip(`"${entry.name}" usa una compresión no soportada (${entry.method})`);
     }
 }
