@@ -17,6 +17,20 @@ export function htmlToText(html: string | undefined): string {
 
 /** Como htmlToText pero recortado: para índices, donde solo hace falta decidir si entrar. */
 export function htmlToSnippet(html: string | undefined, max = 200): string {
-    const texto = htmlToText(html);
-    return texto.length > max ? `${texto.slice(0, max).trimEnd()}…` : texto;
+    const text = htmlToText(html);
+    return text.length > max ? `${text.slice(0, max).trimEnd()}…` : text;
+}
+
+/** Texto plano del modelo a HTML para Moodle: escapa, y cada línea en blanco separa un párrafo. */
+export function textToHtml(text: string): string {
+    const escaped = text
+        .trim()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    return escaped
+        .split(/\n\s*\n/)
+        .map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`)
+        .join("");
 }

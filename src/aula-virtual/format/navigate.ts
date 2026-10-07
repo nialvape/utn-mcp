@@ -1,58 +1,55 @@
 import { htmlToSnippet, htmlToText } from "../../shared/html.js";
-import { cursoAddr, discusionAddr, moduloAddr, padre, parseAddress, RAIZ, type Address } from "./address.js";
 import {
+    courseAddr,
+    discussionAddr,
+    formatAddress,
+    moduleAddr,
+    parentOf,
+    parseAddress,
+    type Address,
+} from "./address.js";
+import {
+    canAddDiscussion,
     getCourseSections,
     getDiscussionPosts,
     getForumDiscussions,
     getUserCourses,
-    POR_PAGINA,
+    PAGE_SIZE,
 } from "../client/client.js";
 import type { AulaSession } from "../client/session.js";
-import { urlParaUsuario } from "./files.js";
 import type { CourseModule, CourseSection } from "../client/types.js";
+import { viewChoice, viewChoicegroup, viewSubmission } from "./activities.js";
+import { isoDate, toFile } from "./fields.js";
 
-const isoDate = (seconds: number | null | undefined) => (seconds ? new Date(seconds * 1000).toISOString() : null);
+type ModuleAddress = Extract<Address, { level: "module" }>;
 
 /**
  * Entra a una dirección del aula y devuelve su contenido, el padre y las direcciones de lo que hay
  * adentro. Es el único lugar que decide qué ve el modelo y cuánto texto le cuesta.
  */
-export async function open(session: AulaSession, direccion: string, pagina = 0) {
-    const address = parseAddress(direccion);
-    const base = { direccion: formatear(address), padre: padre(address) };
+export async function open(session: AulaSession, rawAddress: string, page = 0) {
+    const address = parseAddress(rawAddress);
+    const base = { direccion: formatAddress(address), padre: parentOf(address) };
 
-    switch (address.nivel) {
-        case "raiz":
-            return { ...base, cursos: await verCursos(session) };
+    switch (address.level) {
+        case "root":
+            return { ...base, cursos: await viewCourses(session) };
 
-        case "curso":
-            return { ...base, secciones: await verCurso(session, address.courseId) };
+        case "course":
+            return { ...base, secciones: await viewCourse(session, address.courseId) };
 
-        case "modulo":
-            return { ...base, ...(await verModulo(session, address, pagina)) };
+        case "module":
+            return { ...base, ...(await viewModule(session, address, page)) };
 
-        case "discusion":
-            return { ...base, ...(await verDiscusion(session, address.discussionId)) };
+        case "discussion":
+            return { ...base, ...(await viewDiscussion(session, address.discussionId)) };
     }
 }
 
-function formatear(address: Address): string {
-    switch (address.nivel) {
-        case "raiz":
-            return RAIZ;
-        case "curso":
-            return cursoAddr(address.courseId);
-        case "modulo":
-            return moduloAddr(address.courseId, address.cmid);
-        case "discusion":
-            return discusionAddr(address.courseId, address.cmid, address.discussionId);
-    }
-}
-
-async function verCursos(session: AulaSession) {
+async function viewCourses(session: AulaSession) {
     const courses = await getUserCourses(session);
     return courses.map((c) => ({
-        direccion: cursoAddr(c.id),
+        direccion: courseAddr(c.id),
         id: c.id,
         nombre: c.fullname,
         nombreCorto: c.shortname,
@@ -63,7 +60,7 @@ async function verCursos(session: AulaSession) {
 }
 
 /** El mapa del curso: secciones y módulos, con las descripciones recortadas. */
-async function verCurso(session: AulaSession, courseId: number) {
+async function viewCourse(session: AulaSession, courseId: number) {
     const sections = await getCourseSections(session, courseId);
     return sections
         .filter((s) => s.uservisible !== false)
@@ -76,20 +73,36 @@ async function verCurso(session: AulaSession, courseId: number) {
         .filter((s) => s.resumen || s.modulos.length > 0);
 }
 
-async function verModulo(session: AulaSession, address: Extract<Address, { nivel: "modulo" }>, pagina: number) {
-    const { seccion, module } = await buscarModulo(session, address.courseId, address.cmid);
-    const modulo = toModule(module, address.courseId);
-    if (module.modname !== "forum") return { seccion, modulo };
+async function viewModule(session: AulaSession, address: ModuleAddress, page: number) {
+    const { sectionName, module } = await findModule(session, address.courseId, address.cmid);
+    const base = { seccion: sectionName, modulo: toModule(module, address.courseId) };
+    switch (module.modname) {
+        case "forum":
+            return { ...base, ...(await viewForum(session, address, module.instance, page)) };
+        case "assign":
+            return { ...base, entrega: await viewSubmission(session, address.courseId, module) };
+        case "choice":
+            return { ...base, eleccion: await viewChoice(session, address.courseId, module) };
+        case "choicegroup":
+            return { ...base, eleccion: await viewChoicegroup(session, module) };
+        default:
+            return base;
+    }
+}
 
-    // Un foro es un índice: asuntos y un fragmento de cada uno. El mensaje completo sale al abrir la discusión.
-    const { discussions } = await getForumDiscussions(session, module.instance, pagina);
+/** Un foro es un índice: asuntos y un fragmento de cada uno. El mensaje completo sale al abrir la discusión. */
+async function viewForum(session: AulaSession, address: ModuleAddress, forumid: number, page: number) {
+    const [{ discussions }, canStartDiscussion] = await Promise.all([
+        getForumDiscussions(session, forumid, page),
+        canAddDiscussion(session, forumid),
+    ]);
     return {
-        seccion,
-        modulo,
+        puedeAbrirHilo: canStartDiscussion,
         discusiones: discussions.map((d) => ({
-            direccion: discusionAddr(address.courseId, address.cmid, d.discussion),
+            direccion: discussionAddr(address.courseId, address.cmid, d.discussion),
             asunto: d.subject,
             autor: d.userfullname,
+            autorId: d.userid,
             fecha: isoDate(d.created),
             ultimaActividad: isoDate(d.timemodified),
             respuestas: d.numreplies,
@@ -97,72 +110,68 @@ async function verModulo(session: AulaSession, address: Extract<Address, { nivel
             adjuntos: d.attachment || undefined,
             resumen: htmlToSnippet(d.message),
         })),
-        pagina,
-        hayMasDiscusiones: discussions.length === POR_PAGINA || undefined,
+        pagina: page,
+        hayMasDiscusiones: discussions.length === PAGE_SIZE || undefined,
     };
 }
 
-async function verDiscusion(session: AulaSession, discussionId: number) {
+async function viewDiscussion(session: AulaSession, discussionId: number) {
     const { posts } = await getDiscussionPosts(session, discussionId);
-    const visibles = posts.filter((p) => !p.isdeleted);
+    const visible = posts.filter((p) => !p.isdeleted);
     return {
-        asunto: visibles[0]?.subject,
-        publicaciones: visibles.map((p) => ({
+        asunto: visible[0]?.subject,
+        publicaciones: visible.map((p) => ({
             autor: p.author.fullname,
+            autorId: p.author.id,
             fecha: isoDate(p.timecreated),
             respuestaA: p.parentid ?? undefined,
             id: p.id,
             mensaje: htmlToText(p.message),
             adjuntos: p.attachments.length ? p.attachments.map(toFile) : undefined,
+            // Lo que el usuario puede hacer con cada publicación, para no intentar lo que Moodle va a rechazar.
+            acciones: allowedActions(p.capabilities),
         })),
     };
 }
 
+function allowedActions(c: { reply: boolean; edit: boolean; delete: boolean }) {
+    const allowed = [c.reply && "responder", c.edit && "editar", c.delete && "borrar"].filter(Boolean);
+    return allowed.length ? allowed : undefined;
+}
+
 /** Ubica un módulo por su cmid y se queda con la sección que lo contiene. */
-async function buscarModulo(
+export async function findModule(
     session: AulaSession,
     courseId: number,
     cmid: number,
-): Promise<{ seccion: string; module: CourseModule }> {
+): Promise<{ sectionName: string; module: CourseModule }> {
     const sections: CourseSection[] = await getCourseSections(session, courseId, cmid);
     for (const section of sections) {
         const module = section.modules.find((m) => m.id === cmid);
         if (!module) continue;
         if (!module.uservisible) throw new Error(`No tenés acceso al módulo ${cmid}.`);
-        return { seccion: section.name, module };
+        return { sectionName: section.name, module };
     }
     throw new Error(`No existe el módulo ${cmid} en el curso ${courseId}.`);
 }
 
-/** `resumido` recorta la descripción: en el mapa del curso alcanza para decidir si entrar. */
-function toModule(m: CourseModule, courseId: number, resumido = false) {
+/** `summarized` recorta la descripción: en el mapa del curso alcanza para decidir si entrar. */
+function toModule(m: CourseModule, courseId: number, summarized = false) {
     const contents = m.contents ?? [];
-    const archivos = contents.filter((c) => c.type === "file");
-    const enlaces = contents.filter((c) => c.type === "url");
+    const files = contents.filter((c) => c.type === "file");
+    const links = contents.filter((c) => c.type === "url");
     return {
-        direccion: moduloAddr(courseId, m.id),
+        direccion: moduleAddr(courseId, m.id),
         id: m.id,
         nombre: m.name,
         tipo: m.modname,
         url: m.url,
-        descripcion: (resumido ? htmlToSnippet(m.description) : htmlToText(m.description)) || undefined,
+        descripcion: (summarized ? htmlToSnippet(m.description) : htmlToText(m.description)) || undefined,
         restriccion: htmlToText(m.availabilityinfo) || undefined,
         fechas: m.dates?.length
             ? m.dates.map((d) => ({ etiqueta: d.label, fecha: isoDate(d.timestamp) }))
             : undefined,
-        archivos: archivos.length ? archivos.map(toFile) : undefined,
-        enlaces: enlaces.length ? enlaces.map((l) => l.fileurl) : undefined,
-    };
-}
-
-function toFile(f: { filename: string; filepath?: string | null; filesize: number; mimetype?: string; fileurl: string; timemodified?: number | null }) {
-    return {
-        nombre: f.filename,
-        ruta: f.filepath || undefined,
-        tamanio: f.filesize,
-        mimetype: f.mimetype,
-        modificado: isoDate(f.timemodified),
-        // Sirve para pasársela al usuario y también para leerlo con aula_read_file.
-        url: urlParaUsuario(f.fileurl),
+        archivos: files.length ? files.map(toFile) : undefined,
+        enlaces: links.length ? links.map((l) => l.fileurl) : undefined,
     };
 }

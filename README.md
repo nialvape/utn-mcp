@@ -6,6 +6,10 @@ Este es el Model Context Protocol server NO OFICIAL de la UTN. Con él podrás p
 - *"¿Qué avisó la profesora de Física esta semana?"*
 - *"Resumime la guía de la unidad 3 de Sistemas Operativos."*
 - *"Pasame el link para bajar el apunte de calorimetría."*
+- *"¿Qué nota me pusieron en el TP1 y qué me corrigieron?"*
+- *"Preguntá en el foro de consultas si el parcial incluye la unidad 4."*
+- *"Anotame en el grupo 6."*
+- *"Agendame el recuperatorio del 14 a las 18."*
 
 El agente recorre el aula como lo harías vos: entra al curso, mira los foros y abre los archivos que hagan falta.
 
@@ -16,6 +20,14 @@ El agente recorre el aula como lo harías vos: entra al curso, mira los foros y 
 | `aula_open` | Entra a un curso, un módulo, un foro o una discusión. Cada respuesta trae las direcciones de lo que hay adentro y de un nivel más arriba, así el agente navega sin perderse. |
 | `aula_read_file` | Lee un archivo del aula, por partes cuando es largo. |
 | `aula_get_site_info` | Datos de tu usuario en el aula virtual. |
+| `aula_forum_post` | Abre un hilo en un foro o responde en una discusión. |
+| `aula_forum_edit_post` | Edita una publicación tuya. |
+| `aula_forum_delete_post` | Borra una publicación tuya. |
+| `aula_choice_answer` | Responde una elección o te anota en un grupo. |
+| `aula_send_message` | Manda un mensaje privado a un docente o compañero. |
+| `aula_calendar_add_event` | Agrega un recordatorio a tu calendario del aula. |
+
+Al abrir una tarea, `aula_open` muestra si la entregaste, cuándo vence y la devolución con la nota. Las tools que escriben le piden al agente que te muestre lo que va a hacer y espere tu confirmación.
 
 ### Archivos que puede leer
 - **PDF**: el texto, página por página. Los **escaneados** se mandan como imagen de cada página, y el agente los lee igual.
