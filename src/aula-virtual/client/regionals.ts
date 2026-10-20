@@ -34,7 +34,7 @@ const REGIONALS: Regional[] = [
     { id: "frch", name: "Chubut (FRCh)", baseUrl: "https://frch.cvg.utn.edu.ar", support: "candidate" },
     { id: "frcu", name: "Concepción del Uruguay (FRCU)", baseUrl: "https://virtual.frcu.utn.edu.ar", support: "candidate" },
     { id: "frcon", name: "Concordia (FRCon)", baseUrl: "https://frcon.cvg.utn.edu.ar", support: "candidate" },
-    { id: "frc", name: "Córdoba (FRC)", baseUrl: "https://uv.frc.utn.edu.ar", support: "candidate" },
+    { id: "frc", name: "Córdoba (FRC)", baseUrl: "https://uv.frc.utn.edu.ar", support: "verified" },
     { id: "frd", name: "Delta (FRD)", baseUrl: "https://frd.cvg.utn.edu.ar", support: "candidate" },
     { id: "frgp", name: "General Pacheco (FRGP)", baseUrl: "https://frgp.cvg.utn.edu.ar", support: "candidate" },
     // Office 365.

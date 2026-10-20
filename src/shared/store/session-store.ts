@@ -14,6 +14,9 @@ export interface SessionStore {
 
     findUserByEmail(email: string): Promise<StoredUser | null>;
 
+    /** Todos los usuarios, los más nuevos primero. */
+    listUsers(): Promise<ListedUser[]>;
+
     /**
      * Emite un token para el usuario y devuelve el valor en claro: se muestra una sola vez, en la base
      * queda solo el hash. Sin `ttlSeconds` no vence (el token fijo del modo local).
@@ -65,6 +68,11 @@ export interface StoredUser {
     utnUsername: string;
     /** El institucional, el que se usa para decidir el acceso; null en usuarios de antes de guardarlo. */
     email: string | null;
+}
+
+export interface ListedUser extends StoredUser {
+    /** Cuándo entró por primera vez, en segundos desde epoch. */
+    createdAt: number;
 }
 
 /** Un cliente público: no tiene secreto, se autentica con PKCE. */

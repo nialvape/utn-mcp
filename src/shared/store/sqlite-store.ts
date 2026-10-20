@@ -6,6 +6,7 @@ import { storeFile, storeKeyFile } from "../paths.js";
 import type {
     ConnectedClient,
     IssuedToken,
+    ListedUser,
     RegisteredClient,
     SessionStore,
     StoredUser,
@@ -108,6 +109,13 @@ export class SqliteStore implements SessionStore {
             .prepare("SELECT id, regional, utn_username, email FROM users WHERE email = ?")
             .get(email.trim().toLowerCase()) as UserRow | undefined;
         return row ? toUser(row) : null;
+    }
+
+    async listUsers(): Promise<ListedUser[]> {
+        const rows = this.db
+            .prepare("SELECT id, regional, utn_username, email, created_at FROM users ORDER BY created_at DESC")
+            .all() as unknown as (UserRow & { created_at: number })[];
+        return rows.map((r) => ({ ...toUser(r), createdAt: r.created_at }));
     }
 
     async findUser(userId: number): Promise<StoredUser | null> {

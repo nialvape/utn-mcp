@@ -10,13 +10,14 @@ export interface LinkedAccount {
     userId: number;
     regional: Regional;
     username: string;
+    fullname: string;
     email: string | null;
 }
 
 /**
  * Entra al aula de la regional con usuario y contraseña, crea el usuario del store si no existe y le
  * guarda la sesión (el token). La contraseña se usa solo acá: no se guarda en ningún lado.
- * Lo usan `utn-mcp login --http` y el login por OAuth de la versión hosteada.
+ * Lo usan `utn-mcp login --http`, el login por OAuth de la versión hosteada y `/admin/verificar`.
  * `regional` tiene que venir con su soporte en este servidor (`availableRegionals` con las verificadas).
  */
 export async function linkAulaAccount(
@@ -47,5 +48,5 @@ export async function linkAulaAccount(
     const userId = await store.findOrCreateUser(regional.id, username, own.email ?? undefined);
     const data: StoredAulaData = { username, token };
     await store.saveSession(userId, AULA_PLATFORM, JSON.stringify(data));
-    return { userId, regional, username, email: own.email };
+    return { userId, regional, username, fullname: own.fullname, email: own.email };
 }

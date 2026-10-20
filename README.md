@@ -160,7 +160,7 @@ La configuración va en variables de entorno o en un `.env` en la carpeta desde 
 | `UTN_MCP_ACCESS_URL`, `UTN_MCP_ACCESS_SECRET` | Servicio que decide quién puede entrar. | — |
 | `UTN_MCP_ALLOWED_EMAILS` | Emails o dominios (`@frba.utn.edu.ar`) habilitados, separados por coma, si no hay `UTN_MCP_ACCESS_URL`. | Entra cualquiera con usuario de la UTN |
 | `UTN_MCP_REDIRECT_ALLOW` | Hosts (`app.ejemplo.com`) o esquemas (`miapp:`) extra, separados por coma, a los que puede volver el login de OAuth. Loopback, Claude, ChatGPT, VS Code y Cursor pasan siempre. Cualquier otro host HTTPS (un agente propio, por ejemplo) se acepta, pero el login avisa a dónde vuelve y el alumno tiene que marcar que lo conecta bajo su responsabilidad: es la defensa contra alguien que use tu página de login para quedarse con su sesión. Los hosts de esta lista pasan sin aviso. | — |
-| `UTN_MCP_ADMIN_SECRET` | Habilita `POST /admin/clientes` y `/admin/clientes/revocar`, para que un panel tuyo liste y desconecte las apps de cada usuario (por email). | — |
+| `UTN_MCP_ADMIN_SECRET` | Habilita la API de `/admin` para un panel de cuentas tuyo: `POST /admin/usuarios` (todos los usuarios con sus apps), `/admin/clientes` y `/admin/clientes/revocar` (las apps de un usuario, por email), `/admin/regionales` (las regionales con su soporte) y `/admin/verificar` (entra al aula con usuario y contraseña, como el login de OAuth, y le guarda la sesión). | — |
 | `UTN_MCP_LOGIN_URL` | Página donde el usuario renueva su sesión del aula; el agente se la pasa. | `<UTN_MCP_PUBLIC_URL>/login` |
 | `UTN_MCP_DB`, `UTN_MCP_KEY` | Base de sesiones y su clave de cifrado (32 bytes en base64). | En la carpeta de config |
 
