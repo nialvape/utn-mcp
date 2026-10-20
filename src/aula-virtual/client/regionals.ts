@@ -3,7 +3,8 @@
  * - `verified`: alguien ya entró y usó las tools.
  * - `candidate`: tiene habilitado el servicio `moodle_mobile_app` (y se sabe si entra por SSO), así que
  *   casi seguro anda; se verifica con el primer login que funcione.
- * - `unsupported`: no tiene el servicio habilitado; se puede elegir, pero todavía no se puede usar.
+ * - `unsupported`: no tiene el servicio habilitado, o entra por un SSO que todavía no sabemos usar
+ *   (Office 365); se puede elegir, pero todavía no se puede usar.
  */
 export type RegionalSupport = "verified" | "candidate" | "unsupported";
 
@@ -16,7 +17,13 @@ export interface Regional {
     support: RegionalSupport;
 }
 
+/**
+ * El soporte de las que no son `verified` sale de `tool_mobile_get_public_config`, que Moodle contesta
+ * sin login (octubre de 2026). Falta Villa María (FRVM): no encontramos su aula.
+ */
 const REGIONALS: Regional[] = [
+    { id: "fra", name: "Avellaneda (FRA)", baseUrl: "https://www.utnfravirtual.org.ar", support: "candidate" },
+    { id: "frbb", name: "Bahía Blanca (FRBB)", baseUrl: "https://aulavirtual.frbb.utn.edu.ar", support: "candidate" },
     {
         id: "frba",
         name: "Buenos Aires (FRBA)",
@@ -24,8 +31,38 @@ const REGIONALS: Regional[] = [
         ssoHost: "auth.frba.utn.edu.ar",
         support: "verified",
     },
+    { id: "frch", name: "Chubut (FRCh)", baseUrl: "https://frch.cvg.utn.edu.ar", support: "candidate" },
+    { id: "frcu", name: "Concepción del Uruguay (FRCU)", baseUrl: "https://virtual.frcu.utn.edu.ar", support: "candidate" },
+    { id: "frcon", name: "Concordia (FRCon)", baseUrl: "https://frcon.cvg.utn.edu.ar", support: "candidate" },
+    { id: "frc", name: "Córdoba (FRC)", baseUrl: "https://uv.frc.utn.edu.ar", support: "candidate" },
+    { id: "frd", name: "Delta (FRD)", baseUrl: "https://frd.cvg.utn.edu.ar", support: "candidate" },
+    { id: "frgp", name: "General Pacheco (FRGP)", baseUrl: "https://frgp.cvg.utn.edu.ar", support: "candidate" },
+    // Office 365.
+    { id: "frh", name: "Haedo (FRH)", baseUrl: "https://frh.cvg.utn.edu.ar", support: "unsupported" },
+    { id: "frlp", name: "La Plata (FRLP)", baseUrl: "https://frlp.cvg.utn.edu.ar", support: "candidate" },
+    { id: "frlr", name: "La Rioja (FRLR)", baseUrl: "https://frlr.cvg.utn.edu.ar", support: "candidate" },
+    // Tiene también frmdp.cvg.utn.edu.ar, pero ese no tiene el servicio habilitado y entra con Office 365.
+    { id: "frmdp", name: "Mar del Plata (FRMDP)", baseUrl: "https://campus.mdp.utn.edu.ar", support: "candidate" },
+    // Sin el servicio habilitado.
+    { id: "frm", name: "Mendoza (FRM)", baseUrl: "https://campusvirtual.frm.utn.edu.ar", support: "unsupported" },
+    { id: "frn", name: "Neuquén (FRN)", baseUrl: "https://frn.cvg.utn.edu.ar", support: "candidate" },
+    { id: "frp", name: "Paraná (FRP)", baseUrl: "https://frp.cvg.utn.edu.ar", support: "candidate" },
+    { id: "frra", name: "Rafaela (FRRa)", baseUrl: "https://frra.cvg.utn.edu.ar", support: "candidate" },
+    { id: "frrq", name: "Reconquista (FRRq)", baseUrl: "https://frrq.cvg.utn.edu.ar", support: "candidate" },
     { id: "frre", name: "Resistencia (FRRE)", baseUrl: "https://frre.cvg.utn.edu.ar", support: "verified" },
+    { id: "frro", name: "Rosario (FRRo)", baseUrl: "https://frro.cvg.utn.edu.ar", support: "candidate" },
+    { id: "frsfco", name: "San Francisco (FRSFco)", baseUrl: "https://frsfco.cvg.utn.edu.ar", support: "candidate" },
+    // Office 365.
+    { id: "frsn", name: "San Nicolás (FRSN)", baseUrl: "https://frsn.cvg.utn.edu.ar", support: "unsupported" },
+    { id: "frsr", name: "San Rafael (FRSR)", baseUrl: "https://campus.frsr.utn.edu.ar/moodle", support: "candidate" },
+    { id: "frsc", name: "Santa Cruz (FRSC)", baseUrl: "https://frsc.cvg.utn.edu.ar", support: "candidate" },
+    { id: "frsf", name: "Santa Fe (FRSF)", baseUrl: "https://campusvirtual.frsf.utn.edu.ar", support: "candidate" },
+    // Sin el servicio habilitado.
+    { id: "frtdf", name: "Tierra del Fuego (FRTDF)", baseUrl: "https://cvg.frtdf.utn.edu.ar", support: "unsupported" },
+    { id: "frtl", name: "Trenque Lauquen (FRTL)", baseUrl: "https://frtl.cvg.utn.edu.ar", support: "candidate" },
     { id: "frt", name: "Tucumán (FRT)", baseUrl: "https://frt.cvg.utn.edu.ar", support: "verified" },
+    // Sin el servicio habilitado.
+    { id: "frvt", name: "Venado Tuerto (FRVT)", baseUrl: "https://frvt.cvg.utn.edu.ar", support: "unsupported" },
 ];
 
 const DEFAULT_REGIONAL = "frba";
@@ -42,13 +79,13 @@ export class UnknownRegionalError extends Error {
     }
 }
 
-/** La regional no tiene habilitado `moodle_mobile_app`: sin él no hay token, así que ni se intenta entrar. */
+/** Su aula no tiene el servicio habilitado o entra por un SSO que no sabemos usar: ni se intenta entrar. */
 export class UnsupportedRegionalError extends Error {
     name = "UnsupportedRegionalError";
     constructor(readonly regional: Regional) {
         super(
-            `El aula de ${regional.name} todavía no tiene habilitado el servicio que usa UTN-MCP, así que por ahora ` +
-                "no se puede usar. Lo tiene que habilitar quien administra el aula de esa regional.",
+            `Todavía no hay soporte para ${regional.name}: su aula no tiene habilitado el servicio que usa ` +
+                "UTN-MCP o entra por un login que todavía no sabemos usar.",
         );
     }
 }

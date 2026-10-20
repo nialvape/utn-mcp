@@ -120,7 +120,7 @@ utn-mcp login
 y en la config del cliente usás `"command": "utn-mcp"` sin argumentos.
 
 ### Regionales
-La regional se elige al iniciar sesión, de una lista. Hoy están Buenos Aires (FRBA), Resistencia (FRRE) y Tucumán (FRT). El login se adapta solo: si el aula entra por SSO (Keycloak), como FRBA, usa el SSO; si no, el login directo de Moodle.
+La regional se elige al iniciar sesión, de una lista con las regionales de la UTN. Buenos Aires (FRBA), Resistencia (FRRE) y Tucumán (FRT) ya están probadas. El login se adapta solo: si el aula entra por SSO (Keycloak), como FRBA, usa el SSO; si no, el login directo de Moodle.
 
 La lista puede traer regionales que nadie probó todavía: su aula tiene habilitado el servicio que usa UTN-MCP, así que casi seguro anda. En un servidor hosteado, la primera persona que entra con una de esas la deja verificada para el resto. Las que no tienen el servicio habilitado aparecen como "todavía sin soporte": se pueden elegir, pero el login avisa que por ahora no se puede usar y no manda la contraseña.
 

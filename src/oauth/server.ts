@@ -301,10 +301,9 @@ export function mountOAuth(app: Express, { issuer, store, access, sameOrigin, re
         if (!regional) {
             retry("Elegí tu regional de la lista.");
             return null;
-        }
-        // Sin el servicio habilitado no hay token: no tiene sentido mandarle la contraseña al aula.
+        }        
         if (regional.support === "unsupported") {
-            retry(`Todavía no hay soporte para ${regional.name}: su aula no tiene habilitado el servicio que usa UTN-MCP.`);
+            retry(`Todavía no hay soporte para ${regional.name}: su aula todavía no funciona con UTN-MCP.`);
             return null;
         }
         try {

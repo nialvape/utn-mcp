@@ -24,27 +24,36 @@ export function userFacingUrl(fileurl: string): string {
     } catch {
         return fileurl;
     }
-    if (!u.pathname.startsWith(WS_PATH)) return fileurl;
-    u.pathname = WEB_PATH + u.pathname.slice(WS_PATH.length);
+    // Hay aulas en una subruta (`/moodle`): el tramo a cambiar puede no estar al principio.
+    const at = u.pathname.indexOf(WS_PATH);
+    if (at < 0) return fileurl;
+    u.pathname = u.pathname.slice(0, at) + WEB_PATH + u.pathname.slice(at + WS_PATH.length);
     return u.href;
 }
 
 /**
  * Acepta cualquiera de las dos formas y devuelve la del web service. Solo archivos del aula del
- * usuario (`origin`): con cualquier otra URL estaríamos mandando su token a donde diga el modelo.
+ * usuario (`baseUrl`): con cualquier otra URL estaríamos mandando su token a donde diga el modelo.
  */
-function downloadUrl(origin: string, url: string): URL {
+function downloadUrl(baseUrl: string, url: string): URL {
     let u: URL;
     try {
         u = new URL(url);
     } catch {
         throw new Error(`URL inválida: "${url}". Usá la \`url\` de un archivo tal como la devuelve aula_open.`);
     }
-    const path = u.pathname.startsWith(WS_PATH) ? u.pathname : u.pathname.startsWith(WEB_PATH) ? WS_PATH + u.pathname.slice(WEB_PATH.length) : null;
+    const root = new URL(baseUrl);
+    const prefix = root.pathname.replace(/\/+$/, "");
+    const rest = u.pathname.startsWith(prefix + WS_PATH)
+        ? u.pathname.slice(prefix.length + WS_PATH.length)
+        : u.pathname.startsWith(prefix + WEB_PATH)
+          ? u.pathname.slice(prefix.length + WEB_PATH.length)
+          : null;
     // `origin` ignora `usuario@`: con eso `fetch` rechaza la URL y su error, con el token ya puesto, llega al modelo.
-    if (u.origin !== origin || u.username || u.password || !path) {
-        throw new Error(`Solo se pueden leer archivos del aula virtual (${origin}${WEB_PATH}...).`);
+    if (u.origin !== root.origin || u.username || u.password || rest === null) {
+        throw new Error(`Solo se pueden leer archivos del aula virtual (${root.origin}${prefix}${WEB_PATH}...).`);
     }
+    const path = prefix + WS_PATH + rest;
     u.pathname = path;
     u.searchParams.delete("token");
     u.searchParams.delete("wstoken");
@@ -68,7 +77,7 @@ export interface FileRead {
 /** Baja un archivo del aula y devuelve desde la parte `from` tantas como entren en el presupuesto. */
 export async function readAulaFile(session: AulaSession, url: string, from = 1): Promise<FileRead> {
     const { baseUrl } = await session.getRegional();
-    const download = downloadUrl(new URL(baseUrl).origin, url);
+    const download = downloadUrl(baseUrl, url);
     const fileName = decodeURIComponent(download.pathname.split("/").pop() ?? "");
     const forUser = userFacingUrl(download.href);
 
