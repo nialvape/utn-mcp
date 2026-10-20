@@ -26,7 +26,8 @@ type Landing = { token: string } | { url: string; html: string };
 
 /**
  * Obtiene un token del web service. Dos estrategias según la regional:
- * - Regionales con SSO (Keycloak, ej. FRBA): flujo de launch.php, que usa la sesión del SSO.
+ * - Regionales con SSO (Keycloak, ej. FRBA): flujo de launch.php, que usa la sesión del SSO. Si el
+ *   SSO rechaza las credenciales, `login/token.php`: hay usuarios sin cuenta en el SSO.
  * - Regionales con login directo de Moodle (ej. FRT): primero `login/token.php` (no depende del
  *   plugin de mobile launch, que puede estar deshabilitado); si falla, flujo de launch.php.
  * Las cookies quedan en `jar` para renovar el token sin contraseña mientras sigan vivas.
@@ -55,7 +56,12 @@ export async function fetchToken(jar: CookieJar, credentials: Credentials | null
             if (!credentials) throw new LoginRequiredError();
             landing = await submitSsoForm(jar, landing.html, credentials);
             if ("token" in landing) return landing.token;
-            if (SSO_HOST && new URL(landing.url).host === SSO_HOST) throw new InvalidCredentialsError(extractLoginError(landing.html));
+            if (SSO_HOST && new URL(landing.url).host === SSO_HOST) {
+                // Aspirantes del ingreso y algunas tecnicaturas no tienen cuenta en el SSO: entran con el login de Moodle.
+                const viaTokenPhp = await tryTokenPhp(credentials);
+                if (viaTokenPhp) return viaTokenPhp;
+                throw new InvalidCredentialsError(extractLoginError(landing.html));
+            }
         }
     } else {
         if (!credentials) throw new LoginRequiredError();
