@@ -54,8 +54,8 @@ const now = () => Math.floor(Date.now() / 1000);
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
 /**
- * El SessionStore sobre SQLite. Las sesiones van cifradas con AES-256-GCM: tienen el token de Moodle
- * y las cookies del SSO, que alcanzan para entrar al aula como el usuario. Los tokens se guardan
+ * El SessionStore sobre SQLite. Las sesiones van cifradas con AES-256-GCM: tienen el token de Moodle,
+ * que alcanza para entrar al aula como el usuario. Los tokens se guardan
  * hasheados, así que una copia de la base no sirve para usar el servidor.
  */
 export class SqliteStore implements SessionStore {

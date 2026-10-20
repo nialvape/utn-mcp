@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import type { CookieJar } from "tough-cookie";
+import { CookieJar } from "tough-cookie";
 import type { Credentials } from "./credentials.js";
 import { AULA_BASE_URL, SSO_HOST } from "./constants.js";
 import { MoodleError } from "./moodle-api.js";
@@ -30,12 +30,14 @@ type Landing = { token: string } | { url: string; html: string };
  *   SSO rechaza las credenciales, `login/token.php`: hay usuarios sin cuenta en el SSO.
  * - Regionales con login directo de Moodle (ej. FRT): primero `login/token.php` (no depende del
  *   plugin de mobile launch, que puede estar deshabilitado); si falla, flujo de launch.php.
- * Las cookies quedan en `jar` para renovar el token sin contraseña mientras sigan vivas.
+ * Las cookies se usan solo durante el login y se descartan: las sesiones de Moodle y del SSO duran
+ * horas y el token, semanas, así que no sirven para renovarlo.
  */
-export async function fetchToken(jar: CookieJar, credentials: Credentials | null): Promise<string> {
+export async function fetchToken(credentials: Credentials): Promise<string> {
+    const jar = new CookieJar();
+
     // Regionales con login directo: intentamos token.php primero (no depende de launch.php).
     if (!SSO_HOST) {
-        if (!credentials) throw new LoginRequiredError();
         const viaTokenPhp = await tryTokenPhp(credentials);
         if (viaTokenPhp) return viaTokenPhp;
     }
@@ -53,7 +55,6 @@ export async function fetchToken(jar: CookieJar, credentials: Credentials | null
         if ("token" in landing) return landing.token;
 
         if (SSO_HOST && new URL(landing.url).host === SSO_HOST) {
-            if (!credentials) throw new LoginRequiredError();
             landing = await submitSsoForm(jar, landing.html, credentials);
             if ("token" in landing) return landing.token;
             if (SSO_HOST && new URL(landing.url).host === SSO_HOST) {
@@ -64,7 +65,6 @@ export async function fetchToken(jar: CookieJar, credentials: Credentials | null
             }
         }
     } else {
-        if (!credentials) throw new LoginRequiredError();
         const loginPageUrl = `${AULA_BASE_URL}/login/index.php`;
         const loginPage = await follow(jar, loginPageUrl);
         if ("token" in loginPage) return loginPage.token;
@@ -83,7 +83,7 @@ export async function fetchToken(jar: CookieJar, credentials: Credentials | null
     landing = await follow(jar, launchUrl);
     if ("token" in landing) return landing.token;
 
-    if (!SSO_HOST && credentials) {
+    if (!SSO_HOST) {
         const viaTokenPhp = await tryTokenPhp(credentials);
         if (viaTokenPhp) return viaTokenPhp;
     }

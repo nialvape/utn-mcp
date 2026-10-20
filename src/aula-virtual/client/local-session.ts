@@ -1,21 +1,19 @@
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { CookieJar, type SerializedCookieJar } from "tough-cookie";
 import { sessionFile } from "../../shared/paths.js";
 import { logger } from "../../shared/logger.js";
 import { loadCredentials, type Credentials } from "./credentials.js";
 import type { AulaSession } from "./session.js";
-import { fetchToken } from "./sso-login.js";
+import { fetchToken, LoginRequiredError } from "./sso-login.js";
 
 interface StoredSession {
     token: string | null;
     obtainedAt: string | null;
-    cookies: SerializedCookieJar | null;
 }
 
 /**
  * Sesión del modo local: un solo usuario, guardada en disco.
- * Credenciales en el keychain (o UTN_USER/UTN_PASS); token y cookies del SSO en session.json.
+ * Credenciales en el keychain (o UTN_USER/UTN_PASS); el token en session.json.
  */
 export class LocalSession implements AulaSession {
     private refreshing: Promise<string> | null = null;
@@ -34,14 +32,12 @@ export class LocalSession implements AulaSession {
         return this.refreshing;
     }
 
-    /** Obtiene un token nuevo y lo guarda junto con las cookies del SSO. */
+    /** Obtiene un token nuevo y lo guarda. */
     async login(credentials: Credentials | null): Promise<string> {
+        if (!credentials) throw new LoginRequiredError();
         logger.info("Obteniendo token del aula virtual...");
-        const stored = await this.read();
-        const jar = stored.cookies ? await CookieJar.deserialize(stored.cookies) : new CookieJar();
-
-        const token = await fetchToken(jar, credentials);
-        await this.write({ token, obtainedAt: new Date().toISOString(), cookies: await jar.serialize() });
+        const token = await fetchToken(credentials);
+        await this.write({ token, obtainedAt: new Date().toISOString() });
         return token;
     }
 
@@ -49,7 +45,7 @@ export class LocalSession implements AulaSession {
         try {
             return JSON.parse(await readFile(sessionFile(), "utf8")) as StoredSession;
         } catch {
-            return { token: null, obtainedAt: null, cookies: null };
+            return { token: null, obtainedAt: null };
         }
     }
 

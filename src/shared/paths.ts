@@ -10,7 +10,7 @@ export function configDir(): string {
     return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "utn-mcp");
 }
 
-/** Token de Moodle + cookies del SSO del modo local. */
+/** Token de Moodle del modo local. */
 export const sessionFile = () => join(configDir(), "session.json");
 
 /** Base de usuarios, tokens y sesiones del modo HTTP: UTN_MCP_DB o un SQLite en la carpeta de configuración. */

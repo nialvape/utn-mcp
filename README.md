@@ -188,7 +188,7 @@ Guardá esa `UTN_MCP_KEY`: sin ella no se pueden descifrar las sesiones guardada
 ## Dónde se guardan tus datos
 Instalado en tu computadora, todo queda ahí:
 - **Usuario y contraseña**: en el gestor de credenciales del sistema (Windows Credential Manager, Keychain en macOS, Secret Service en Linux).
-- **Token del aula virtual y cookies de sesión**: en `%APPDATA%\utn-mcp\session.json` (Windows) o `~/.config/utn-mcp/session.json` (Linux y macOS).
+- **Token del aula virtual**: en `%APPDATA%\utn-mcp\session.json` (Windows) o `~/.config/utn-mcp/session.json` (Linux y macOS).
 - **En modo HTTP**: la contraseña no se guarda; la sesión va cifrada en `utn-mcp.db`, en la misma carpeta, con la clave de `store.key` (o la de `UTN_MCP_KEY`). Del token del cliente solo se guarda el hash.
 
 En Linux sin gestor de credenciales (servidores, Docker, WSL) podés definir las variables de entorno `UTN_USER` y `UTN_PASS` en lugar de usar `login`.

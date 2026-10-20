@@ -1,4 +1,3 @@
-import { CookieJar } from "tough-cookie";
 import type { SessionStore } from "../../shared/store/session-store.js";
 import { getOwnUser } from "./client.js";
 import type { Credentials } from "./credentials.js";
@@ -14,12 +13,11 @@ export interface LinkedAccount {
 
 /**
  * Entra al aula con usuario y contraseña, crea el usuario del store si no existe y le guarda la
- * sesión (token y cookies del SSO). La contraseña se usa solo acá: no se guarda en ningún lado.
+ * sesión (el token). La contraseña se usa solo acá: no se guarda en ningún lado.
  * Lo usan `utn-mcp login --http` y el login por OAuth de la versión hosteada.
  */
 export async function linkAulaAccount(store: SessionStore, credentials: Credentials): Promise<LinkedAccount> {
-    const jar = new CookieJar();
-    const token = await fetchToken(jar, credentials);
+    const token = await fetchToken(credentials);
 
     // El token recién emitido: si falla, no hay con qué renovarlo.
     const fresh: AulaSession = {
@@ -33,7 +31,7 @@ export async function linkAulaAccount(store: SessionStore, credentials: Credenti
     const username = own.username.toLowerCase();
 
     const userId = await store.findOrCreateUser(username, own.email ?? undefined);
-    const data: StoredAulaData = { username, token, cookies: await jar.serialize() };
+    const data: StoredAulaData = { username, token };
     await store.saveSession(userId, AULA_PLATFORM, JSON.stringify(data));
     return { userId, username, email: own.email };
 }
