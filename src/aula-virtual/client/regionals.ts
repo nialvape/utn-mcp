@@ -61,6 +61,8 @@ const REGIONALS: Regional[] = [
     { id: "frtdf", name: "Tierra del Fuego (FRTDF)", baseUrl: "https://cvg.frtdf.utn.edu.ar", support: "unsupported" },
     { id: "frtl", name: "Trenque Lauquen (FRTL)", baseUrl: "https://frtl.cvg.utn.edu.ar", support: "candidate" },
     { id: "frt", name: "Tucumán (FRT)", baseUrl: "https://frt.cvg.utn.edu.ar", support: "verified" },
+    // No es una regional sino el aula de la Tecnicatura en Programación a distancia del SIED.
+    { id: "tup", name: "Tecnicatura en Programación (SIED)", baseUrl: "https://tup.sied.utn.edu.ar", support: "verified" },
     // Sin el servicio habilitado.
     { id: "frvt", name: "Venado Tuerto (FRVT)", baseUrl: "https://frvt.cvg.utn.edu.ar", support: "unsupported" },
 ];

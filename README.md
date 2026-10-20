@@ -48,7 +48,7 @@ Necesitás [Node.js](https://nodejs.org) 20 o superior. No hace falta clonar el 
 ```bash
 npx -y utn-mcp login
 ```
-Te pide tu regional, tu usuario y tu contraseña: los mismos con los que entrás al aula virtual. Si no tenés usuario institucional (por ejemplo, en el curso de ingreso), usá el que te dieron para el aula. Se hace una sola vez: después el servidor renueva la sesión solo.
+Te pide tu regional, tu usuario y tu contraseña: los mismos con los que entrás al aula virtual. Si no tenés usuario institucional (por ejemplo, en el curso de ingreso), usá el que te dieron para el aula. En Córdoba (FRC) los alumnos entran con el mail completo (`<legajo>@<especialidad>.frc.utn.edu.ar`), no con el legajo solo; con una cuenta `@frc.utn.edu.ar`, con lo que va antes de la `@`. Se hace una sola vez: después el servidor renueva la sesión solo.
 
 ### 2. Agregarlo a tu cliente
 
@@ -120,7 +120,7 @@ utn-mcp login
 y en la config del cliente usás `"command": "utn-mcp"` sin argumentos.
 
 ### Regionales
-La regional se elige al iniciar sesión, de una lista con las regionales de la UTN. Buenos Aires (FRBA), Resistencia (FRRE) y Tucumán (FRT) ya están probadas. El login se adapta solo: si el aula entra por SSO (Keycloak), como FRBA, usa el SSO; si no, el login directo de Moodle.
+La regional se elige al iniciar sesión, de una lista con las regionales de la UTN. Buenos Aires (FRBA), Córdoba (FRC), Resistencia (FRRE) y Tucumán (FRT) ya están probadas. También está el aula de la Tecnicatura en Programación a distancia del SIED (TUP). El login se adapta solo: si el aula entra por SSO (Keycloak), como FRBA, usa el SSO; si no, el login directo de Moodle.
 
 La lista puede traer regionales que nadie probó todavía: su aula tiene habilitado el servicio que usa UTN-MCP, así que casi seguro anda. En un servidor hosteado, la primera persona que entra con una de esas la deja verificada para el resto. Las que no tienen el servicio habilitado aparecen como "todavía sin soporte": se pueden elegir, pero el login avisa que por ahora no se puede usar y no manda la contraseña.
 

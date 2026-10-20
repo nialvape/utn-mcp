@@ -118,6 +118,13 @@ async function tryTokenPhp(baseUrl: string, credentials: Credentials): Promise<s
     if (data.errorcode === "invalidlogin" || /invalid login/i.test(data.error ?? "")) {
         throw new InvalidCredentialsError(data.error);
     }
+    // Hay aulas (ej. la TUP) a las que se les rompe un plugin de autenticación con cada login
+    // rechazado: contestan `generalexceptionmessage`, y el formulario web muestra la misma excepción.
+    if (data.errorcode === "generalexceptionmessage") {
+        throw new InvalidCredentialsError(
+            `${data.error} (es un error interno del aula, que en algunas aparece cuando el usuario o la contraseña están mal)`,
+        );
+    }
     // El mismo servicio lo usa launch.php: si token.php lo rechaza, seguir no sirve.
     throw new MoodleError(
         `El aula no dio el token (${data.errorcode ?? res.status}): ${data.error ?? "respuesta sin token"}. ` +
