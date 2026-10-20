@@ -39,7 +39,8 @@ export interface SessionStore {
     /** Las regionales que alguien ya usó en este servidor sin que estuvieran verificadas en el catálogo. */
     listVerifiedRegionals(): Promise<string[]>;
 
-    markRegionalVerified(regional: string): Promise<void>;
+    /** true si esta llamada la verificó: nadie lo había hecho antes. */
+    markRegionalVerified(regional: string): Promise<boolean>;
 
     /** Clientes OAuth registrados por registro dinámico (RFC 7591). */
     saveClient(client: RegisteredClient): Promise<void>;

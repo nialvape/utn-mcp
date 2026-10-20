@@ -12,6 +12,8 @@ export interface LinkedAccount {
     username: string;
     fullname: string;
     email: string | null;
+    /** Este login fue el primero en verificar la regional en este servidor. */
+    firstVerifier: boolean;
 }
 
 /**
@@ -38,9 +40,10 @@ export async function linkAulaAccount(
     const own = await getOwnUser(fresh);
     // La primera vez que alguien entra a una regional sin verificar se prueban también los cursos: si
     // anda, queda verificada para todos los de este servidor.
+    let firstVerifier = false;
     if (regional.support === "candidate") {
         await getUserCourses(fresh);
-        await store.markRegionalVerified(regional.id);
+        firstVerifier = await store.markRegionalVerified(regional.id);
     }
     // El de Moodle, en minúscula, igual que en `users`: es con lo que se compara al renovar.
     const username = own.username.toLowerCase();
@@ -48,5 +51,5 @@ export async function linkAulaAccount(
     const userId = await store.findOrCreateUser(regional.id, username, own.email ?? undefined);
     const data: StoredAulaData = { username, token };
     await store.saveSession(userId, AULA_PLATFORM, JSON.stringify(data));
-    return { userId, regional, username, fullname: own.fullname, email: own.email };
+    return { userId, regional, username, fullname: own.fullname, email: own.email, firstVerifier };
 }

@@ -183,10 +183,11 @@ export class SqliteStore implements SessionStore {
         return rows.map((r) => r.regional);
     }
 
-    async markRegionalVerified(regional: string): Promise<void> {
-        this.db
+    async markRegionalVerified(regional: string): Promise<boolean> {
+        const { changes } = this.db
             .prepare("INSERT INTO verified_regionals (regional, verified_at) VALUES (?, ?) ON CONFLICT DO NOTHING")
             .run(regional, now());
+        return Number(changes) > 0;
     }
 
     async saveClient(client: RegisteredClient): Promise<void> {

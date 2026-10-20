@@ -89,8 +89,8 @@ export function mountAdmin(app: Express, store: SessionStore, secret: string) {
 
     /**
      * `{ regional, usuario, contrasena }` → entra al aula como el login de OAuth: crea el usuario si no
-     * existe y le guarda la sesión, así ya puede usar las tools. Devuelve `{ usuario, nombre, email }`; si
-     * no entra, `{ error, motivo }`.
+     * existe y le guarda la sesión, así ya puede usar las tools. Devuelve `{ usuario, nombre, email,
+     * primero? }`, con `primero` si fue el primero en verificar la regional; si no entra, `{ error, motivo }`.
      */
     app.post("/admin/verificar", requireSecret, json, async (req, res) => {
         const id = typeof req.body?.regional === "string" ? req.body.regional : "";
@@ -109,7 +109,12 @@ export function mountAdmin(app: Express, store: SessionStore, secret: string) {
         try {
             const account = await linkAulaAccount(store, regional, { username, password });
             logger.info(`Admin: ${account.username} (${regional.id}) vinculó su aula.`);
-            res.json({ usuario: account.username, nombre: account.fullname, email: account.email ?? undefined });
+            res.json({
+                usuario: account.username,
+                nombre: account.fullname,
+                email: account.email ?? undefined,
+                primero: account.firstVerifier || undefined,
+            });
         } catch (e) {
             if (e instanceof InvalidCredentialsError) {
                 return void res.status(401).json({ error: "credenciales", motivo: "El aula rechazó el usuario o la contraseña." });
