@@ -1,7 +1,7 @@
 import { randomInt } from "node:crypto";
 import { CookieJar } from "tough-cookie";
 import type { Credentials } from "./credentials.js";
-import { AULA_BASE_URL, SSO_HOST } from "./constants.js";
+import { UnsupportedRegionalError, type Regional } from "./regionals.js";
 import { MoodleError } from "./moodle-api.js";
 
 export class LoginRequiredError extends Error {
@@ -33,17 +33,19 @@ type Landing = { token: string } | { url: string; html: string };
  * Las cookies se usan solo durante el login y se descartan: las sesiones de Moodle y del SSO duran
  * horas y el token, semanas, así que no sirven para renovarlo.
  */
-export async function fetchToken(credentials: Credentials): Promise<string> {
+export async function fetchToken(regional: Regional, credentials: Credentials): Promise<string> {
+    if (regional.support === "unsupported") throw new UnsupportedRegionalError(regional);
+    const { baseUrl, ssoHost } = regional;
     const jar = new CookieJar();
 
     // Regionales con login directo: intentamos token.php primero (no depende de launch.php).
-    if (!SSO_HOST) {
-        const viaTokenPhp = await tryTokenPhp(credentials);
+    if (!ssoHost) {
+        const viaTokenPhp = await tryTokenPhp(baseUrl, credentials);
         if (viaTokenPhp) return viaTokenPhp;
     }
 
     const launchUrl =
-        `${AULA_BASE_URL}/admin/tool/mobile/launch.php` +
+        `${baseUrl}/admin/tool/mobile/launch.php` +
         `?service=moodle_mobile_app&passport=${randomInt(1e9)}&urlscheme=moodlemobile`;
 
     let landing = await follow(jar, launchUrl);
@@ -54,18 +56,18 @@ export async function fetchToken(credentials: Credentials): Promise<string> {
         landing = await follow(jar, decodeHtml(oauthUrl));
         if ("token" in landing) return landing.token;
 
-        if (SSO_HOST && new URL(landing.url).host === SSO_HOST) {
+        if (ssoHost && new URL(landing.url).host === ssoHost) {
             landing = await submitSsoForm(jar, landing.html, credentials);
             if ("token" in landing) return landing.token;
-            if (SSO_HOST && new URL(landing.url).host === SSO_HOST) {
+            if (ssoHost && new URL(landing.url).host === ssoHost) {
                 // Aspirantes del ingreso y algunas tecnicaturas no tienen cuenta en el SSO: entran con el login de Moodle.
-                const viaTokenPhp = await tryTokenPhp(credentials);
+                const viaTokenPhp = await tryTokenPhp(baseUrl, credentials);
                 if (viaTokenPhp) return viaTokenPhp;
                 throw new InvalidCredentialsError(extractLoginError(landing.html));
             }
         }
     } else {
-        const loginPageUrl = `${AULA_BASE_URL}/login/index.php`;
+        const loginPageUrl = `${baseUrl}/login/index.php`;
         const loginPage = await follow(jar, loginPageUrl);
         if ("token" in loginPage) return loginPage.token;
         landing = await submitMoodleLoginForm(jar, loginPage.url, loginPage.html, credentials);
@@ -83,8 +85,8 @@ export async function fetchToken(credentials: Credentials): Promise<string> {
     landing = await follow(jar, launchUrl);
     if ("token" in landing) return landing.token;
 
-    if (!SSO_HOST) {
-        const viaTokenPhp = await tryTokenPhp(credentials);
+    if (!ssoHost) {
+        const viaTokenPhp = await tryTokenPhp(baseUrl, credentials);
         if (viaTokenPhp) return viaTokenPhp;
     }
 
@@ -95,8 +97,8 @@ export async function fetchToken(credentials: Credentials): Promise<string> {
  * Pide el token a /login/token.php (Moodle estándar). Devuelve null si el aula no lo expone
  * (no contesta JSON), para seguir con launch.php; si contesta con un error, lo propaga.
  */
-async function tryTokenPhp(credentials: Credentials): Promise<string | null> {
-    const res = await fetch(`${AULA_BASE_URL}/login/token.php`, {
+async function tryTokenPhp(baseUrl: string, credentials: Credentials): Promise<string | null> {
+    const res = await fetch(`${baseUrl}/login/token.php`, {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({

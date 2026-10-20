@@ -1,9 +1,7 @@
 import { openDocument, UnsupportedFormat, type Part } from "../../shared/documents/index.js";
-import { AULA_BASE_URL } from "../client/constants.js";
 import { fetchFile } from "../client/moodle-api.js";
 import type { AulaSession } from "../client/session.js";
 
-const ORIGIN = new URL(AULA_BASE_URL).origin;
 const WS_PATH = "/webservice/pluginfile.php/";
 const WEB_PATH = "/pluginfile.php/";
 
@@ -17,17 +15,25 @@ const MAX_BYTES = 30 * 1024 * 1024;
 /**
  * Moodle devuelve las URLs del web service, que piden token. Al usuario le sirve la misma ruta sin
  * `/webservice`, que se abre con la sesión de su navegador. Es la única que mostramos: el token no
- * sale nunca del servidor.
+ * sale nunca del servidor. `fileurl` viene de Moodle: ya es del aula del usuario.
  */
 export function userFacingUrl(fileurl: string): string {
-    return fileurl.replace(`${ORIGIN}${WS_PATH}`, `${ORIGIN}${WEB_PATH}`);
+    let u: URL;
+    try {
+        u = new URL(fileurl);
+    } catch {
+        return fileurl;
+    }
+    if (!u.pathname.startsWith(WS_PATH)) return fileurl;
+    u.pathname = WEB_PATH + u.pathname.slice(WS_PATH.length);
+    return u.href;
 }
 
 /**
- * Acepta cualquiera de las dos formas y devuelve la del web service. Solo archivos del aula: con
- * cualquier otra URL estaríamos mandando el token del usuario a donde diga el modelo.
+ * Acepta cualquiera de las dos formas y devuelve la del web service. Solo archivos del aula del
+ * usuario (`origin`): con cualquier otra URL estaríamos mandando su token a donde diga el modelo.
  */
-function downloadUrl(url: string): URL {
+function downloadUrl(origin: string, url: string): URL {
     let u: URL;
     try {
         u = new URL(url);
@@ -36,8 +42,8 @@ function downloadUrl(url: string): URL {
     }
     const path = u.pathname.startsWith(WS_PATH) ? u.pathname : u.pathname.startsWith(WEB_PATH) ? WS_PATH + u.pathname.slice(WEB_PATH.length) : null;
     // `origin` ignora `usuario@`: con eso `fetch` rechaza la URL y su error, con el token ya puesto, llega al modelo.
-    if (u.origin !== ORIGIN || u.username || u.password || !path) {
-        throw new Error(`Solo se pueden leer archivos del aula virtual (${ORIGIN}${WEB_PATH}...).`);
+    if (u.origin !== origin || u.username || u.password || !path) {
+        throw new Error(`Solo se pueden leer archivos del aula virtual (${origin}${WEB_PATH}...).`);
     }
     u.pathname = path;
     u.searchParams.delete("token");
@@ -61,7 +67,8 @@ export interface FileRead {
 
 /** Baja un archivo del aula y devuelve desde la parte `from` tantas como entren en el presupuesto. */
 export async function readAulaFile(session: AulaSession, url: string, from = 1): Promise<FileRead> {
-    const download = downloadUrl(url);
+    const { baseUrl } = await session.getRegional();
+    const download = downloadUrl(new URL(baseUrl).origin, url);
     const fileName = decodeURIComponent(download.pathname.split("/").pop() ?? "");
     const forUser = userFacingUrl(download.href);
 

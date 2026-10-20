@@ -10,7 +10,7 @@ import type { FileSource } from "./shared/uploads.js";
 export function createServer(aula: AulaSession, files: FileSource): McpServer {
     const server = new McpServer({
         name: "UTN-MCP",
-        version: "0.7.0",
+        version: "0.8.0",
     });
 
     registerAulaVirtualTools(server, aula, files);

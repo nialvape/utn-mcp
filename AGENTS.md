@@ -1,6 +1,6 @@
 # utn-mcp
 
-MCP server that gives an agent access to UTN FRBA's systems. It runs locally over STDIO (`npx utn-mcp`) and will run hosted and multi-user at utnmcp.com.ar. What exists today works well: for something new, copy how `src/aula-virtual/` is built.
+MCP server that gives an agent access to the systems of the UTN (Universidad Tecnológica Nacional), across its regionals. It runs locally over STDIO (`npx utn-mcp`) and will run hosted and multi-user at utnmcp.com.ar. What exists today works well: for something new, copy how `src/aula-virtual/` is built.
 
 ## Module layout
 
@@ -28,7 +28,7 @@ Each layer has a single job and dependencies go in one direction only: `tools.ts
 
 ## Session and multi-user
 
-The server will serve many students at once, so authentication state is never global. Every function that touches the platform receives the user's session as its first parameter (`AulaSession`), and `createServer` receives it from outside. `LocalSession` is the local-mode implementation; hosted mode will have its own.
+The server will serve many students at once, so authentication state is never global. Every function that touches the platform receives the user's session as its first parameter (`AulaSession`), and `createServer` receives it from outside. The regional is part of that state too: each user picks it at login and the session carries it (`getRegional()`), so URLs to the aula are built from the session, never from a global. `LocalSession` is the local-mode implementation; hosted mode will have its own.
 
 The user's token never leaves the server. The model and the user get URLs that open with the browser session (`userFacingUrl`). Before sending the token to a URL that came from the model, validate that it belongs to the platform (`downloadUrl`).
 

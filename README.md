@@ -19,7 +19,7 @@ El agente recorre el aula como lo harías vos: entra al curso, mira los foros y 
 | `aula_list_courses` | Lista tus cursos. Es el punto de partida. |
 | `aula_open` | Entra a un curso, un módulo, un foro o una discusión. Cada respuesta trae las direcciones de lo que hay adentro y de un nivel más arriba, así el agente navega sin perderse. |
 | `aula_read_file` | Lee un archivo del aula, por partes cuando es largo. |
-| `aula_get_site_info` | Datos de tu usuario en el aula virtual. |
+| `aula_get_site_info` | Datos de tu usuario y de tu regional en el aula virtual. |
 | `aula_forum_post` | Abre un hilo en un foro o responde en una discusión. |
 | `aula_forum_edit_post` | Edita una publicación tuya. |
 | `aula_forum_delete_post` | Borra una publicación tuya. |
@@ -48,7 +48,7 @@ Necesitás [Node.js](https://nodejs.org) 20 o superior. No hace falta clonar el 
 ```bash
 npx -y utn-mcp login
 ```
-Te pide tu usuario institucional y tu contraseña de la UTN (los mismos de "Usuarios Institucionales" en el aula virtual). Se hace una sola vez: después el servidor renueva la sesión solo.
+Te pide tu regional, tu usuario y tu contraseña: los mismos con los que entrás al aula virtual. Si no tenés usuario institucional (por ejemplo, en el curso de ingreso), usá el que te dieron para el aula. Se hace una sola vez: después el servidor renueva la sesión solo.
 
 ### 2. Agregarlo a tu cliente
 
@@ -119,31 +119,19 @@ utn-mcp login
 ```
 y en la config del cliente usás `"command": "utn-mcp"` sin argumentos.
 
-### Otra regional de la UTN (FRT, FRRE, etc.)
-Por defecto el servidor apunta al aula virtual de la UTN FRBA. Para otra regional, creá un archivo `.env` en la carpeta desde donde corrés `utn-mcp` (o definí las variables en el entorno) con:
-```bash
-UTN_REGIONAL=frt
-```
-Regionales incluidas: `frba`, `frt`, `frre`. El login se adapta solo: si el campus usa SSO Keycloak (como FRBA) se configura automáticamente; si no, es login directo de Moodle.
+### Regionales
+La regional se elige al iniciar sesión, de una lista. Hoy están Buenos Aires (FRBA), Resistencia (FRRE) y Tucumán (FRT). El login se adapta solo: si el aula entra por SSO (Keycloak), como FRBA, usa el SSO; si no, el login directo de Moodle.
 
-Si tu campus no está en la lista, podés dar la URL completa:
+La lista puede traer regionales que nadie probó todavía: su aula tiene habilitado el servicio que usa UTN-MCP, así que casi seguro anda. En un servidor hosteado, la primera persona que entra con una de esas la deja verificada para el resto. Las que no tienen el servicio habilitado aparecen como "todavía sin soporte": se pueden elegir, pero el login avisa que por ahora no se puede usar y no manda la contraseña.
+
+Si tu campus no está en la lista, abrí un [issue](https://github.com/nialvape/utn-mcp/issues) con la URL de su aula virtual para sumarlo. Mientras tanto, podés usarlo definiendo en un `.env` en la carpeta desde donde corrés `utn-mcp` (o en el entorno):
 ```bash
 UTN_AULA_BASE_URL=https://tu-campus.utn.edu.ar
 # UTN_SSO_HOST=auth.tu-campus.utn.edu.ar  # solo si usa Keycloak
 ```
-Y para sumarlo al registro para todos, agregá una entrada en la constante `REGIONALS` de `src/aula-virtual/client/constants.ts`, con la clave de la regional y la URL de su campus (y `ssoHost` si usa Keycloak):
+Aparece como una opción más al iniciar sesión.
 
-```ts
-const REGIONALS: Record<string, Regional> = {
-    frba: { baseUrl: "https://aulasvirtuales.frba.utn.edu.ar", ssoHost: "auth.frba.utn.edu.ar" },
-    frt:  { baseUrl: "https://frt.cvg.utn.edu.ar" },
-    frre: { baseUrl: "https://frre.cvg.utn.edu.ar" },
-    // tu regional:
-    frxx: { baseUrl: "https://tu-campus.utn.edu.ar", ssoHost: "auth.tu-campus.utn.edu.ar" }, // ssoHost solo si usa Keycloak
-};
-```
-
-Después corré `utn-mcp login` con normalidad. El login se adapta solo: si tiene `ssoHost` usa SSO (Keycloak), si no, login directo de Moodle.
+`UTN_REGIONAL` (por ejemplo, `UTN_REGIONAL=frt`) elige la que viene marcada por defecto, y es la que se usa si en lugar de `login` definís `UTN_USER` y `UTN_PASS`.
 
 ### Modo HTTP (opcional)
 Necesita Node 22.13 o más nuevo. Primero, una vez:
@@ -159,9 +147,9 @@ Levanta el servidor en `http://127.0.0.1:3000/mcp`, solo accesible desde tu prop
 En este modo el servidor no lee archivos de tu disco: para entregar, el agente pide un link con `aula_assign_upload_link` y sube ahí los archivos con `curl` si tiene terminal, o te pasa el link para que los elijas desde el navegador.
 
 ### Hostearlo para otros
-En modo HTTP el servidor también es servidor de autorización OAuth: un cliente MCP (Claude, ChatGPT) que se conecta a `https://tu-dominio/mcp` recibe un 401, descubre el OAuth y abre una página donde el alumno entra con su usuario de la UTN. Ese login vincula su aula: la contraseña se usa una sola vez para sacar el token de Moodle y **no se guarda**. Cuando la sesión del aula vence, el agente le pasa el link de `/login` para renovarla, sin reconectar el cliente.
+En modo HTTP el servidor también es servidor de autorización OAuth: un cliente MCP (Claude, ChatGPT) que se conecta a `https://tu-dominio/mcp` recibe un 401, descubre el OAuth y abre una página donde el alumno elige su regional y entra con su usuario de la UTN. Cada alumno usa el aula de su regional, aunque sean de regionales distintas. Ese login vincula su aula: la contraseña se usa una sola vez para sacar el token de Moodle y **no se guarda**. Cuando la sesión del aula vence, el agente le pasa el link de `/login` para renovarla, sin reconectar el cliente.
 
-Quién puede entrar lo decidís vos: con `UTN_MCP_ALLOWED_EMAILS` (una lista), o con `UTN_MCP_ACCESS_URL`, que apunta a un servicio tuyo. El servidor le hace `POST` con `{ "email", "usuario" }` y el header `Authorization: Bearer <UTN_MCP_ACCESS_SECRET>`, y espera `{ "permitido": true }` o `{ "permitido": false, "motivo": "...", "url": "..." }`. Se consulta al conectar y en cada renovación del token (cada hora), así que una baja se aplica sola.
+Quién puede entrar lo decidís vos: con `UTN_MCP_ALLOWED_EMAILS` (una lista), o con `UTN_MCP_ACCESS_URL`, que apunta a un servicio tuyo. El servidor le hace `POST` con `{ "email", "usuario", "regional" }` y el header `Authorization: Bearer <UTN_MCP_ACCESS_SECRET>`, y espera `{ "permitido": true }` o `{ "permitido": false, "motivo": "...", "url": "..." }`. Se consulta al conectar y en cada renovación del token (cada hora), así que una baja se aplica sola.
 
 La configuración va en variables de entorno o en un `.env` en la carpeta desde donde lo corrés (copiá [`.env.example`](https://github.com/nialvape/utn-mcp/blob/main/.env.example)):
 

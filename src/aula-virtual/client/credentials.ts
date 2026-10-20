@@ -3,6 +3,8 @@ import { logger } from "../../shared/logger.js";
 export interface Credentials {
     username: string;
     password: string;
+    /** Falta en UTN_USER/UTN_PASS y en las guardadas antes de elegir la regional al entrar. */
+    regional?: string;
 }
 
 const SERVICE = "utn-mcp";

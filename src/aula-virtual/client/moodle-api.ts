@@ -1,9 +1,8 @@
 import { postForm } from "../../shared/http.js";
-import { AULA_BASE_URL } from "./constants.js";
 import type { AulaSession } from "./session.js";
 
-const WS_URL = `${AULA_BASE_URL}/webservice/rest/server.php`;
-const UPLOAD_URL = `${AULA_BASE_URL}/webservice/upload.php`;
+const WS_PATH = "/webservice/rest/server.php";
+const UPLOAD_PATH = "/webservice/upload.php";
 const TOKEN_ERRORS = new Set(["invalidtoken", "expiredtoken"]);
 
 export class MoodleError extends Error {
@@ -28,10 +27,11 @@ export async function callWs<T>(
     wsfunction: string,
     params: Record<string, string | number> = {},
 ): Promise<T> {
+    const { baseUrl } = await session.getRegional();
     let token = await session.getToken();
 
     for (let attempt = 0; ; attempt++) {
-        const data = await postForm<T | MoodleException>(WS_URL, {
+        const data = await postForm<T | MoodleException>(baseUrl + WS_PATH, {
             ...params,
             wstoken: token,
             wsfunction,
@@ -92,6 +92,7 @@ export async function uploadDraftFiles(
     session: AulaSession,
     files: { name: string; bytes: Uint8Array }[],
 ): Promise<number> {
+    const { baseUrl } = await session.getRegional();
     let token = await session.getToken();
 
     for (let attempt = 0; ; attempt++) {
@@ -103,7 +104,7 @@ export async function uploadDraftFiles(
 
         let res: Response;
         try {
-            res = await fetch(UPLOAD_URL, { method: "POST", body: form, signal: AbortSignal.timeout(120_000) });
+            res = await fetch(baseUrl + UPLOAD_PATH, { method: "POST", body: form, signal: AbortSignal.timeout(120_000) });
         } catch (e) {
             throw new MoodleError(`No se pudo subir el archivo: ${(e as Error).message}`);
         }

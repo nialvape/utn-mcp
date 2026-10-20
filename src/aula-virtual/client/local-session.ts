@@ -3,20 +3,32 @@ import { dirname } from "node:path";
 import { sessionFile } from "../../shared/paths.js";
 import { logger } from "../../shared/logger.js";
 import { loadCredentials, type Credentials } from "./credentials.js";
+import { defaultRegional, findRegional, type Regional } from "./regionals.js";
 import type { AulaSession } from "./session.js";
 import { fetchToken, LoginRequiredError } from "./sso-login.js";
 
 interface StoredSession {
     token: string | null;
     obtainedAt: string | null;
+    /** El id de la que se eligió en `utn-mcp login`; no está en las sesiones de antes de elegirla. */
+    regional?: string;
 }
 
 /**
  * Sesión del modo local: un solo usuario, guardada en disco.
- * Credenciales en el keychain (o UTN_USER/UTN_PASS); el token en session.json.
+ * Credenciales en el keychain (o UTN_USER/UTN_PASS); el token y la regional en session.json.
  */
 export class LocalSession implements AulaSession {
     private refreshing: Promise<string> | null = null;
+
+    /**
+     * La elegida en `utn-mcp login`: la de session.json o, si se borró, la guardada con las credenciales.
+     * Sin login (UTN_USER/UTN_PASS) o de antes de elegirla, la de UTN_REGIONAL.
+     */
+    async getRegional(): Promise<Regional> {
+        const regional = (await this.read()).regional ?? (await loadCredentials())?.regional;
+        return regional ? findRegional(regional) : defaultRegional();
+    }
 
     async getToken(): Promise<string> {
         return (await this.read()).token ?? this.refreshToken();
@@ -24,8 +36,8 @@ export class LocalSession implements AulaSession {
 
     /** Una sola renovación en curso aunque varias tools fallen a la vez. */
     refreshToken(): Promise<string> {
-        this.refreshing ??= loadCredentials()
-            .then((creds) => this.login(creds))
+        this.refreshing ??= Promise.all([this.getRegional(), loadCredentials()])
+            .then(([regional, creds]) => this.login(regional, creds))
             .finally(() => {
                 this.refreshing = null;
             });
@@ -33,11 +45,11 @@ export class LocalSession implements AulaSession {
     }
 
     /** Obtiene un token nuevo y lo guarda. */
-    async login(credentials: Credentials | null): Promise<string> {
+    async login(regional: Regional, credentials: Credentials | null): Promise<string> {
         if (!credentials) throw new LoginRequiredError();
-        logger.info("Obteniendo token del aula virtual...");
-        const token = await fetchToken(credentials);
-        await this.write({ token, obtainedAt: new Date().toISOString() });
+        logger.info(`Obteniendo token del aula virtual de ${regional.name}...`);
+        const token = await fetchToken(regional, credentials);
+        await this.write({ token, obtainedAt: new Date().toISOString(), regional: regional.id });
         return token;
     }
 

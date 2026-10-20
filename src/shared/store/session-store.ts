@@ -4,8 +4,11 @@
  * login por OAuth de la versión hosteada o `utn-mcp login --http` en local.
  */
 export interface SessionStore {
-    /** Id del usuario con ese nombre de la UTN; lo crea si no existe. Con `email`, se lo actualiza. */
-    findOrCreateUser(utnUsername: string, email?: string): Promise<number>;
+    /**
+     * Id del usuario con ese nombre en esa regional; lo crea si no existe. Con `email`, se lo actualiza.
+     * Dos regionales pueden tener el mismo nombre de usuario para personas distintas.
+     */
+    findOrCreateUser(regional: string, utnUsername: string, email?: string): Promise<number>;
 
     findUser(userId: number): Promise<StoredUser | null>;
 
@@ -30,6 +33,11 @@ export interface SessionStore {
     /** Cuándo se guardó por última vez la sesión, en segundos desde epoch; null si no hay. */
     sessionUpdatedAt(userId: number, platform: string): Promise<number | null>;
 
+    /** Las regionales que alguien ya usó en este servidor sin que estuvieran verificadas en el catálogo. */
+    listVerifiedRegionals(): Promise<string[]>;
+
+    markRegionalVerified(regional: string): Promise<void>;
+
     /** Clientes OAuth registrados por registro dinámico (RFC 7591). */
     saveClient(client: RegisteredClient): Promise<void>;
 
@@ -52,6 +60,8 @@ export interface ConnectedClient {
 
 export interface StoredUser {
     id: number;
+    /** El id de su regional (`frba`, `frt`...): su aula y, junto con el nombre, su identidad. */
+    regional: string;
     utnUsername: string;
     /** El institucional, el que se usa para decidir el acceso; null en usuarios de antes de guardarlo. */
     email: string | null;

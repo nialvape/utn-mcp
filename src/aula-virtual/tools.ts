@@ -33,13 +33,18 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
     server.registerTool(
         "aula_get_site_info",
         {
-            description: "Datos del usuario logueado en el aula virtual de la UTN FRBA y del sitio Moodle.",
+            description:
+                "Datos del usuario logueado y del sitio Moodle de su aula virtual. `regional` es la regional de la UTN " +
+                "de esa aula (por ejemplo, \"Tucumán (FRT)\"): usala para hablarle de su facultad.",
             annotations: READ_ONLY,
         },
         async () => {
             try {
-                const { sitename, fullname, username, userid, release } = await getSiteInfo(session);
-                return json({ sitename, fullname, username, userid, release });
+                const [{ sitename, fullname, username, userid, release }, regional] = await Promise.all([
+                    getSiteInfo(session),
+                    session.getRegional(),
+                ]);
+                return json({ regional: regional.name, sitename, fullname, username, userid, release });
             } catch (e) {
                 return failure(e);
             }
@@ -381,7 +386,8 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
                           'Ej: ["C:\\Users\\ana\\Documents\\TP3.pdf"].'
                     : "Lista final de los archivos que ya están en la entrega, por su `url` de aula_open; los " +
                           "de `subida` se suman. Lista vacía: quita los que estaban. " +
-                          'Ej: ["https://aulasvirtuales.frba.utn.edu.ar/pluginfile.php/123/assignsubmission_file/submission_files/456/TP3.pdf"].',
+                          'Ej: ["https://<aula>/pluginfile.php/123/assignsubmission_file/submission_files/456/TP3.pdf"], ' +
+                          "con el dominio del aula tal como viene en la `url`.",
             ),
         texto: z
             .string()

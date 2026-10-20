@@ -15,9 +15,11 @@ import type {
 const SCHEMA = `
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY,
-        utn_username TEXT NOT NULL UNIQUE,
+        regional TEXT NOT NULL,
+        utn_username TEXT NOT NULL,
         email TEXT,
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        UNIQUE (regional, utn_username)
     );
     CREATE TABLE IF NOT EXISTS tokens (
         hash TEXT PRIMARY KEY,
@@ -34,6 +36,10 @@ const SCHEMA = `
         data BLOB NOT NULL,
         updated_at INTEGER NOT NULL,
         PRIMARY KEY (user_id, platform)
+    );
+    CREATE TABLE IF NOT EXISTS verified_regionals (
+        regional TEXT PRIMARY KEY,
+        verified_at INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS oauth_clients (
         client_id TEXT PRIMARY KEY,
@@ -81,30 +87,34 @@ export class SqliteStore implements SessionStore {
         return new SqliteStore(db, await loadKey());
     }
 
-    async findOrCreateUser(utnUsername: string, email?: string): Promise<number> {
+    async findOrCreateUser(regional: string, utnUsername: string, email?: string): Promise<number> {
         const username = utnUsername.trim().toLowerCase();
         this.db
-            .prepare("INSERT INTO users (utn_username, created_at) VALUES (?, ?) ON CONFLICT DO NOTHING")
-            .run(username, now());
+            .prepare("INSERT INTO users (regional, utn_username, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING")
+            .run(regional, username, now());
         if (email) {
-            this.db.prepare("UPDATE users SET email = ? WHERE utn_username = ?").run(email.trim().toLowerCase(), username);
+            this.db
+                .prepare("UPDATE users SET email = ? WHERE regional = ? AND utn_username = ?")
+                .run(email.trim().toLowerCase(), regional, username);
         }
-        const row = this.db.prepare("SELECT id FROM users WHERE utn_username = ?").get(username) as { id: number };
+        const row = this.db
+            .prepare("SELECT id FROM users WHERE regional = ? AND utn_username = ?")
+            .get(regional, username) as { id: number };
         return row.id;
     }
 
     async findUserByEmail(email: string): Promise<StoredUser | null> {
-        const row = this.db.prepare("SELECT id, utn_username, email FROM users WHERE email = ?").get(
-            email.trim().toLowerCase(),
-        ) as { id: number; utn_username: string; email: string | null } | undefined;
-        return row ? { id: row.id, utnUsername: row.utn_username, email: row.email } : null;
+        const row = this.db
+            .prepare("SELECT id, regional, utn_username, email FROM users WHERE email = ?")
+            .get(email.trim().toLowerCase()) as UserRow | undefined;
+        return row ? toUser(row) : null;
     }
 
     async findUser(userId: number): Promise<StoredUser | null> {
-        const row = this.db.prepare("SELECT id, utn_username, email FROM users WHERE id = ?").get(userId) as
-            | { id: number; utn_username: string; email: string | null }
-            | undefined;
-        return row ? { id: row.id, utnUsername: row.utn_username, email: row.email } : null;
+        const row = this.db
+            .prepare("SELECT id, regional, utn_username, email FROM users WHERE id = ?")
+            .get(userId) as UserRow | undefined;
+        return row ? toUser(row) : null;
     }
 
     async issueToken(
@@ -158,6 +168,17 @@ export class SqliteStore implements SessionStore {
                     "ON CONFLICT (user_id, platform) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
             )
             .run(userId, platform, this.encrypt(data), now());
+    }
+
+    async listVerifiedRegionals(): Promise<string[]> {
+        const rows = this.db.prepare("SELECT regional FROM verified_regionals").all() as { regional: string }[];
+        return rows.map((r) => r.regional);
+    }
+
+    async markRegionalVerified(regional: string): Promise<void> {
+        this.db
+            .prepare("INSERT INTO verified_regionals (regional, verified_at) VALUES (?, ?) ON CONFLICT DO NOTHING")
+            .run(regional, now());
     }
 
     async saveClient(client: RegisteredClient): Promise<void> {
@@ -217,10 +238,60 @@ export class SqliteStore implements SessionStore {
     }
 }
 
+interface UserRow {
+    id: number;
+    regional: string;
+    utn_username: string;
+    email: string | null;
+}
+
+const toUser = (row: UserRow): StoredUser => ({
+    id: row.id,
+    regional: row.regional,
+    utnUsername: row.utn_username,
+    email: row.email,
+});
+
 /** Lo que `CREATE TABLE IF NOT EXISTS` no agrega a una base que ya existía. */
 function migrate(db: DatabaseSync) {
     const columns = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
     if (!columns.some((c) => c.name === "email")) db.exec("ALTER TABLE users ADD COLUMN email TEXT");
+    if (!columns.some((c) => c.name === "regional")) addRegional(db);
+}
+
+/**
+ * Antes de elegir la regional al entrar, todos los usuarios de un servidor eran de la que tenía
+ * configurada (UTN_REGIONAL, o FRBA). La unicidad pasa de `utn_username` a regional + usuario, y
+ * SQLite no cambia restricciones con ALTER TABLE: se rehace la tabla, conservando los ids.
+ */
+function addRegional(db: DatabaseSync) {
+    const legacy = process.env.UTN_REGIONAL?.trim().toLowerCase() || "frba";
+    // Sin esto, borrar `users` borraría en cascada los tokens y las sesiones.
+    db.exec("PRAGMA foreign_keys = OFF");
+    try {
+        db.exec("BEGIN");
+        db.exec(`
+            CREATE TABLE users_new (
+                id INTEGER PRIMARY KEY,
+                regional TEXT NOT NULL,
+                utn_username TEXT NOT NULL,
+                email TEXT,
+                created_at INTEGER NOT NULL,
+                UNIQUE (regional, utn_username)
+            );
+        `);
+        db.prepare(
+            "INSERT INTO users_new (id, regional, utn_username, email, created_at) " +
+                "SELECT id, ?, utn_username, email, created_at FROM users",
+        ).run(legacy);
+        db.exec("DROP TABLE users; ALTER TABLE users_new RENAME TO users;");
+        db.exec("COMMIT");
+    } catch (e) {
+        db.exec("ROLLBACK");
+        throw e;
+    } finally {
+        db.exec("PRAGMA foreign_keys = ON");
+    }
 }
 
 /**

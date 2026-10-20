@@ -18,7 +18,7 @@ export function mountAdmin(app: Express, store: SessionStore, secret: string) {
         res.status(401).json({ error: "No autorizado." });
     };
 
-    /** `{ email }` → el usuario, cuándo se renovó su sesión del aula y sus apps conectadas. */
+    /** `{ email }` → el usuario, su regional, cuándo se renovó su sesión del aula y sus apps conectadas. */
     app.post("/admin/clientes", requireSecret, json, async (req, res) => {
         const email = typeof req.body?.email === "string" ? req.body.email : "";
         const user = email ? await store.findUserByEmail(email) : null;
@@ -30,6 +30,7 @@ export function mountAdmin(app: Express, store: SessionStore, secret: string) {
         ]);
         res.json({
             usuario: user.utnUsername,
+            regional: user.regional,
             sesionAula: aulaAt ? new Date(aulaAt * 1000).toISOString() : undefined,
             clientes: clients.map((c) => ({
                 id: c.clientId,

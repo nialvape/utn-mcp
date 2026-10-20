@@ -15,7 +15,6 @@ import {
     submitChoicegroupResponse,
     updateDiscussionPost,
 } from "../client/client.js";
-import { AULA_BASE_URL } from "../client/constants.js";
 import type { AulaSession } from "../client/session.js";
 import type { ChoiceOption, ForumPost } from "../client/types.js";
 import { toOption } from "./activities.js";
@@ -221,6 +220,6 @@ export async function addCalendarEvent(
         inicio: isoDate(timestart),
         fin: timeduration ? isoDate(timestart + timeduration) : undefined,
         // Para que el usuario lo vea en el calendario del aula.
-        url: `${AULA_BASE_URL}/calendar/view.php?view=day&time=${timestart}`,
+        url: `${(await session.getRegional()).baseUrl}/calendar/view.php?view=day&time=${timestart}`,
     };
 }

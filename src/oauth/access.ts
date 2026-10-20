@@ -2,8 +2,8 @@ import { logger } from "../shared/logger.js";
 
 export type AccessDecision = { allowed: true } | { allowed: false; reason: string; url?: string };
 
-/** Quién puede usar el servidor: decide con el usuario que acaba de entrar al aula. */
-export type AccessPolicy = (user: { username: string; email: string | null }) => Promise<AccessDecision>;
+/** Quién puede usar el servidor: decide con el usuario que acaba de entrar al aula de su regional. */
+export type AccessPolicy = (user: { regional: string; username: string; email: string | null }) => Promise<AccessDecision>;
 
 /** Cuánto esperamos la respuesta de UTN_MCP_ACCESS_URL, en milisegundos. */
 const ACCESS_TIMEOUT_MS = 5_000;
@@ -36,16 +36,16 @@ function listPolicy(raw: string): AccessPolicy {
     };
 }
 
-/** `POST url` con `{ email, usuario }`; contesta `{ permitido, motivo?, url? }`. */
+/** `POST url` con `{ email, usuario, regional }`; contesta `{ permitido, motivo?, url? }`. */
 function remotePolicy(url: string, secret: string | undefined): AccessPolicy {
     if (!secret) logger.warn("UTN_MCP_ACCESS_URL sin UTN_MCP_ACCESS_SECRET: el pedido de acceso va sin autenticar.");
-    return async ({ username, email }) => {
+    return async ({ regional, username, email }) => {
         if (!email) return { allowed: false, reason: "El aula no devolvió tu email, y sin él no podemos verificar tu acceso." };
         try {
             const res = await fetch(url, {
                 method: "POST",
                 headers: { "content-type": "application/json", ...(secret ? { authorization: `Bearer ${secret}` } : {}) },
-                body: JSON.stringify({ email, usuario: username }),
+                body: JSON.stringify({ email, usuario: username, regional }),
                 signal: AbortSignal.timeout(ACCESS_TIMEOUT_MS),
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);

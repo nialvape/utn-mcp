@@ -28,9 +28,10 @@ p{margin:.75rem 0}
 a{color:var(--accent);text-underline-offset:4px}
 form{display:flex;flex-direction:column;gap:1rem;margin:1.5rem 0}
 label{display:flex;flex-direction:column;gap:.4rem;font-size:10px;text-transform:uppercase;letter-spacing:.16em;color:var(--muted)}
-input{font:inherit;font-size:15px;letter-spacing:normal;text-transform:none;color:var(--ink);background:transparent;
+input,select{font:inherit;font-size:15px;letter-spacing:normal;text-transform:none;color:var(--ink);background:transparent;
 border:1px solid var(--line-strong);border-radius:0;padding:.65rem .75rem}
-input:focus{outline:none;border-color:var(--accent)}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+select option{background:var(--paper);color:var(--ink)}
 input[type=file]{padding:.5rem}
 button{font-size:12px;text-transform:uppercase;letter-spacing:.14em;border:0;border-radius:0;padding:.8rem 1rem;
 background:var(--ink);color:var(--paper);cursor:pointer;transition:background .15s}

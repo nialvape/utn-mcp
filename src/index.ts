@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import type { AuthInfo } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { LocalSession } from "./aula-virtual/client/local-session.js";
+import { defaultRegional } from "./aula-virtual/client/regionals.js";
 import { StoredAulaSession } from "./aula-virtual/client/stored-session.js";
 import { runLogin } from "./aula-virtual/login.js";
 import { startHttpServer, userIdOf } from "./http.js";
@@ -39,6 +40,9 @@ async function main() {
         console.error(USAGE);
         return;
     }
+    // Una UTN_REGIONAL que no existe corta acá: si no, recién fallaría al primer login o al primer pedido.
+    defaultRegional();
+
     if (positionals[0] === "login") {
         await runLogin(values.http);
         return;

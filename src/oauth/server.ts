@@ -7,6 +7,7 @@ import {
     type OAuthMetadata,
 } from "@modelcontextprotocol/server";
 import { linkAulaAccount } from "../aula-virtual/client/link.js";
+import { availableRegionals, defaultRegional, type Regional } from "../aula-virtual/client/regionals.js";
 import { InvalidCredentialsError } from "../aula-virtual/client/sso-login.js";
 import { logger } from "../shared/logger.js";
 import { escapeHtml, page } from "../shared/pages.js";
@@ -91,6 +92,7 @@ export function mountOAuth(app: Express, { issuer, store, access, sameOrigin, re
     const limiter = new RateLimiter(LOGIN_ATTEMPTS, LOGIN_WINDOW_MS);
     const registerLimiter = new RateLimiter(REGISTER_ATTEMPTS, REGISTER_WINDOW_MS);
     const form = express.urlencoded({ extended: false, limit: "16kb" });
+    const regionals = async () => availableRegionals(await store.listVerifiedRegionals());
 
     app.get("/.well-known/oauth-authorization-server", cors, (_req, res) => void res.json(metadata));
     app.get(["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"], cors, (_req, res) =>
@@ -167,6 +169,7 @@ export function mountOAuth(app: Express, { issuer, store, access, sameOrigin, re
         res.type("html").send(
             loginPage({
                 action: "/authorize",
+                regionals: await regionals(),
                 pendingId: id,
                 clientName: client.clientName,
                 redirectUri: q.redirect_uri,
@@ -180,24 +183,27 @@ export function mountOAuth(app: Express, { issuer, store, access, sameOrigin, re
         const request = pending.get(id);
         if (!request) return void errorPage(res, 400, "Pedido vencido", "Pasó demasiado tiempo. Volvé a conectar desde tu app.");
 
+        const list = await regionals();
         const retry = (error: string) =>
             res.type("html").send(
                 loginPage({
                     action: "/authorize",
+                    regionals: list,
                     pendingId: id,
                     clientName: request.clientName,
                     redirectUri: request.redirectUri,
                     unknownRedirect: request.unknownRedirect,
+                    regional: req.body?.regional,
                     error,
                 }),
             );
         if (request.unknownRedirect && req.body?.acepto !== "si") {
             return void retry("Para conectar una app que no es un cliente conocido tenés que aceptar el aviso.");
         }
-        const account = await login(req, retry);
+        const account = await login(req, list, retry);
         if (!account) return;
 
-        const decision = await access({ username: account.username, email: account.email });
+        const decision = await access({ regional: account.regional.id, username: account.username, email: account.email });
         if (!decision.allowed) return void deniedPage(res, decision.reason, decision.url);
 
         pending.take(id);
@@ -207,7 +213,7 @@ export function mountOAuth(app: Express, { issuer, store, access, sameOrigin, re
             redirectUri: request.redirectUri,
             codeChallenge: request.codeChallenge,
         });
-        logger.info(`OAuth: ${account.username} autorizó a ${request.clientName ?? request.clientId}.`);
+        logger.info(`OAuth: ${account.username} (${account.regional.id}) autorizó a ${request.clientName ?? request.clientId}.`);
         redirectWith(res, request.redirectUri, { code, state: request.state, iss: issuer });
     });
 
@@ -241,7 +247,7 @@ export function mountOAuth(app: Express, { issuer, store, access, sameOrigin, re
                 // El acceso se vuelve a mirar en cada refresh: si la cuenta se dio de baja, acá se corta.
                 const user = await store.findUser(found.userId);
                 if (!user) return void oauthError(res, 400, "invalid_grant", "El usuario ya no existe.");
-                const decision = await access({ username: user.utnUsername, email: user.email });
+                const decision = await access({ regional: user.regional, username: user.utnUsername, email: user.email });
                 if (!decision.allowed) return void oauthError(res, 400, "invalid_grant", decision.reason);
                 return void res.json(await issueTokens(store, user.id, clientId));
             }
@@ -261,16 +267,26 @@ export function mountOAuth(app: Express, { issuer, store, access, sameOrigin, re
     });
 
     // Volver a iniciar sesión cuando vence la sesión del aula: no emite tokens, solo renueva la sesión.
-    app.get("/login", (_req, res) => void res.type("html").send(loginPage({ action: "/login" })));
+    app.get("/login", async (_req, res) => void res.type("html").send(loginPage({ action: "/login", regionals: await regionals() })));
     app.post("/login", sameOrigin, form, async (req, res) => {
-        const account = await login(req, (error) => res.type("html").send(loginPage({ action: "/login", error })));
+        const list = await regionals();
+        const account = await login(req, list, (error) =>
+            res.type("html").send(
+                loginPage({
+                    action: "/login",
+                    regionals: list,
+                    regional: req.body?.regional,
+                    error,
+                }),
+            ),
+        );
         if (!account) return;
-        logger.info(`OAuth: ${account.username} renovó su sesión del aula.`);
+        logger.info(`OAuth: ${account.username} (${account.regional.id}) renovó su sesión del aula.`);
         res.type("html").send(page("Listo", "<p>Ya renovamos tu sesión del aula. Volvé al chat y pedile al agente que reintente.</p>"));
     });
 
     /** Entra al aula con lo que mandó el formulario; si falla, vuelve a mostrarlo con el error. */
-    async function login(req: Request, retry: (error: string) => void) {
+    async function login(req: Request, list: Regional[], retry: (error: string) => void) {
         if (!limiter.allow(req.ip ?? "desconocida")) {
             retry("Demasiados intentos. Esperá unos minutos y probá de nuevo.");
             return null;
@@ -281,12 +297,26 @@ export function mountOAuth(app: Express, { issuer, store, access, sameOrigin, re
             retry("Completá usuario y contraseña.");
             return null;
         }
+        const regional = list.find((r) => r.id === String(req.body?.regional ?? ""));
+        if (!regional) {
+            retry("Elegí tu regional de la lista.");
+            return null;
+        }
+        // Sin el servicio habilitado no hay token: no tiene sentido mandarle la contraseña al aula.
+        if (regional.support === "unsupported") {
+            retry(`Todavía no hay soporte para ${regional.name}: su aula no tiene habilitado el servicio que usa UTN-MCP.`);
+            return null;
+        }
         try {
-            return await linkAulaAccount(store, { username, password });
+            return await linkAulaAccount(store, regional, { username, password });
         } catch (e) {
             if (e instanceof InvalidCredentialsError) retry("La UTN rechazó el usuario o la contraseña.");
-            else {
-                logger.error(`Login de ${username}: ${(e as Error).message}`);
+            else if (regional.support === "candidate") {
+                // Nadie la había usado acá: lo más probable es que todavía no ande, no que esté caída.
+                logger.warn(`Regional ${regional.id} sin verificar, falló el login de ${username}: ${(e as Error).message}`);
+                retry(`No pudimos usar el aula de ${regional.name}: puede que todavía no ande con UTN-MCP.`);
+            } else {
+                logger.error(`Login de ${username} (${regional.id}): ${(e as Error).message}`);
                 retry("No pudimos entrar al aula. Puede que esté caída: probá de nuevo en unos minutos.");
             }
             return null;
@@ -340,10 +370,13 @@ function deniedPage(res: Response, reason: string, url?: string) {
 
 function loginPage(o: {
     action: string;
+    regionals: Regional[];
     pendingId?: string;
     clientName?: string | null;
     redirectUri?: string;
     unknownRedirect?: boolean;
+    /** La regional que había elegido, para no hacerla elegir de nuevo si hay que reintentar. */
+    regional?: string;
     error?: string;
 }): string {
     const where = o.redirectUri ? `<strong>${escapeHtml(describeRedirect(o.redirectUri))}</strong>` : "";
@@ -365,12 +398,24 @@ function loginPage(o: {
         : "<p>Tu sesión del aula venció. Entrá con tu usuario de la UTN para renovarla.</p>";
     const error = o.error ? `<p class=error>${escapeHtml(o.error)}</p>` : "";
     const hidden = o.pendingId ? `<input type="hidden" name="pedido" value="${escapeHtml(o.pendingId)}">` : "";
+    const selected = o.regional || defaultRegional().id;
+    const option = (r: Regional) =>
+        `<option value="${escapeHtml(r.id)}"${r.id === selected ? " selected" : ""}>${escapeHtml(r.name)}</option>`;
+    const group = (label: string, support: Regional["support"]) => {
+        const items = o.regionals.filter((r) => r.support === support);
+        return items.length ? `<optgroup label="${escapeHtml(label)}">${items.map(option).join("")}</optgroup>` : "";
+    };
+    const options =
+        group("Regionales", "verified") +
+        group("Agregar mi regional (primera vez acá)", "candidate") +
+        group("Todavía sin soporte", "unsupported");
     return page(
         "Entrar con la UTN",
         intro +
             warning +
             error +
             `<form method="post" action="${o.action}">${hidden}` +
+            `<label>Regional<select name="regional" required>${options}</select></label>` +
             `<label>Usuario<input name="usuario" autocomplete="username" autocapitalize="none" required></label>` +
             `<label>Contraseña<input name="contrasena" type="password" autocomplete="current-password" required></label>` +
             consent +
