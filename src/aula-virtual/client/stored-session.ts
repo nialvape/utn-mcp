@@ -60,7 +60,6 @@ export class StoredAulaSession implements AulaSession {
         if (!credentials || !sameUser) throw this.loginRequired("La sesión del aula venció.");
 
         const token = await fetchToken(regional, credentials).catch((e: unknown) => {
-            // Sin el usuario delante no hay quién conteste el MFA: tiene que volver a entrar él.
             throw e instanceof MfaRequiredError ? this.loginRequired("Tu cuenta de Microsoft pide un segundo factor (MFA).") : e;
         });
         // Sin `...stored`: las sesiones guardadas antes traen cookies, que ya no se usan.

@@ -79,20 +79,20 @@ export async function fetchToken(regional: Regional, credentials: Credentials, s
     let landing = await follow(jar, launchUrl);
     if ("token" in landing) return landing.token;
 
-    const provider = sso && PROVIDERS[sso.provider];
-    const ssoHref = provider && landing.html.match(provider.link)?.[1];
-    if (sso && provider && ssoHref) {
+    const ssoProvider = sso ? PROVIDERS[sso.provider] : undefined;
+    const ssoHref = ssoProvider && landing.html.match(ssoProvider.link)?.[1];
+    if (sso && ssoProvider && ssoHref) {
         landing = await follow(jar, new URL(decodeHtml(ssoHref), landing.url).toString());
         if ("token" in landing) return landing.token;
 
         if (new URL(landing.url).host === sso.host) {
-            landing = await provider.submit(jar, landing, credentials, secondFactor);
+            landing = await ssoProvider.submit(jar, landing, credentials, secondFactor);
             if ("token" in landing) return landing.token;
             if (new URL(landing.url).host === sso.host) {
                 // Aspirantes del ingreso y algunas tecnicaturas no tienen cuenta en el SSO: entran con el login de Moodle.
                 const viaTokenPhp = await tryTokenPhp(baseUrl, credentials);
                 if (viaTokenPhp) return viaTokenPhp;
-                throw new InvalidCredentialsError(provider.loginError(landing.html));
+                throw new InvalidCredentialsError(ssoProvider.loginError(landing.html));
             }
         }
     } else {
@@ -147,7 +147,7 @@ export interface MfaMethod {
     id: string;
     /** "approve": se aprueba en el celular (notificación o llamada); "code": se tipea un código. */
     kind: "approve" | "code";
-    /** Para mostrarle al usuario, con el teléfono enmascarado si Microsoft lo da (ej. "SMS al +XX XXXXXXXX12"). */
+    /** Para mostrarle al usuario, con el teléfono enmascarado si Microsoft lo da (ej. "Código por SMS · +XX XXXXXXXX12"). */
     label: string;
 }
 
@@ -166,8 +166,8 @@ export type SecondFactor = (prompt: MfaPrompt) => Promise<string>;
 
 /** Los `authMethodId` que se completan sin navegador: los demás (FIDO, Windows Hello) necesitan uno. */
 const MFA_METHODS: Record<string, { kind: MfaMethod["kind"]; label: string }> = {
-    PhoneAppNotification: { kind: "approve", label: "Aprobar en Microsoft Authenticator" },
-    CompanionAppsNotification: { kind: "approve", label: "Aprobar en Microsoft Authenticator" },
+    PhoneAppNotification: { kind: "approve", label: "Notificación de Microsoft Authenticator" },
+    CompanionAppsNotification: { kind: "approve", label: "Notificación de Microsoft Authenticator" },
     PhoneAppOTP: { kind: "code", label: "Código de Microsoft Authenticator" },
     OneWaySMS: { kind: "code", label: "Código por SMS" },
     TwoWayVoiceMobile: { kind: "approve", label: "Llamada al celular" },
@@ -251,7 +251,6 @@ async function submitMicrosoftForm(
         }
 
         const step = parseAadConfig(landing.html);
-        // Antes que `sErrorCode`: la página del segundo factor puede traer el AADSTS50074 ("hace falta MFA").
         if (step?.arrUserProofs?.length) {
             if (!secondFactor) throw new MfaRequiredError();
             landing = await completeMfa(jar, landing, step, username, secondFactor);
@@ -295,7 +294,7 @@ async function completeMfa(
     const proofs = cfg.arrUserProofs ?? [];
     const methods = proofs.flatMap(({ authMethodId: id, display }): MfaMethod[] => {
         const known = id ? MFA_METHODS[id] : undefined;
-        return id && known ? [{ id, kind: known.kind, label: display ? `${known.label} (${display})` : known.label }] : [];
+        return id && known ? [{ id, kind: known.kind, label: display ? `${known.label} · ${display}` : known.label }] : [];
     });
     if (!methods.length) {
         const ids = proofs.map((p) => p.authMethodId).join(", ");
@@ -308,7 +307,6 @@ async function completeMfa(
         throw new Error("No se encontró el formulario del segundo factor de Microsoft; puede que haya cambiado.");
     }
 
-    // Arranca marcado el que Microsoft tiene por defecto; si hay uno solo, no se pregunta.
     const preferred = proofs.find((p) => p.isDefault)?.authMethodId;
     methods.sort((a, b) => Number(b.id === preferred) - Number(a.id === preferred));
     const chosenId = methods.length > 1 ? await secondFactor({ step: "choose", methods }) : methods[0].id;

@@ -119,7 +119,6 @@ export function mountAdmin(app: Express, store: SessionStore, secret: string) {
             if (e instanceof InvalidCredentialsError) {
                 return void res.status(401).json({ error: "credenciales", motivo: "El aula rechazó el usuario o la contraseña." });
             }
-            // Esta API no tiene a quién pedirle el segundo factor: el usuario tiene que entrar por la página de login.
             if (e instanceof MfaRequiredError || e instanceof MfaError) {
                 return void res.status(422).json({
                     error: "mfa",

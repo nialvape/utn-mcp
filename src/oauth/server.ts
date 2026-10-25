@@ -219,7 +219,6 @@ export function mountOAuth(app: Express, { issuer, store, access, sameOrigin, re
             const decision = await access({ regional: account.regional.id, username: account.username, email: account.email });
             if (!decision.allowed) return void deniedPage(res, decision.reason, decision.url);
 
-            // Con el segundo factor de por medio, el pedido pudo vencer mientras el usuario lo completaba.
             if (!pending.take(id)) {
                 return void errorPage(res, 400, "Pedido vencido", "Pasó demasiado tiempo. Volvé a conectar desde tu app.");
             }
@@ -302,7 +301,6 @@ export function mountOAuth(app: Express, { issuer, store, access, sameOrigin, re
         });
     });
 
-    // La respuesta a lo que pidió el segundo factor de Microsoft: el método, el código o "ya aprobé".
     app.post("/segundo-factor", sameOrigin, form, async (req, res) => {
         const id = String(req.body?.login ?? "");
         const utnLogin = secondFactors.get(id);

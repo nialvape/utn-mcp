@@ -18,7 +18,7 @@ export class PendingLogin<T> {
                     for (const listener of this.listeners.splice(0)) listener(prompt);
                 }),
         );
-        this.run.catch(() => {}); // El error lo recibe `next`.
+        this.run.catch(() => {});
     }
 
     /** Espera a que el login termine o le pregunte algo al usuario. */
