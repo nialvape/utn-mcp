@@ -13,7 +13,8 @@ import { availableRegionals, defaultRegional, type Regional } from "./client/reg
  */
 export async function runLogin(http: boolean): Promise<void> {
     const regional = await askRegional();
-    const username = (await ask("Usuario de la UTN: ")).trim();
+    const prompt = regional.sso?.provider === "microsoft" ? "Mail de Office 365: " : "Usuario de la UTN: ";
+    const username = (await ask(prompt)).trim();
     if (!username) throw new Error("Falta el usuario.");
     const password = await askHidden("Contraseña: ");
     const credentials: Credentials = { username, password, regional: regional.id };

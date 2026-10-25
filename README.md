@@ -48,7 +48,7 @@ Necesitás [Node.js](https://nodejs.org) 20 o superior. No hace falta clonar el 
 ```bash
 npx -y utn-mcp login
 ```
-Te pide tu regional, tu usuario y tu contraseña: los mismos con los que entrás al aula virtual. Si no tenés usuario institucional (por ejemplo, en el curso de ingreso), usá el que te dieron para el aula. En Córdoba (FRC) los alumnos entran con el mail completo (`<legajo>@<especialidad>.frc.utn.edu.ar`), no con el legajo solo; con una cuenta `@frc.utn.edu.ar`, con lo que va antes de la `@`. Se hace una sola vez: después el servidor renueva la sesión solo.
+Te pide tu regional, tu usuario y tu contraseña: los mismos con los que entrás al aula virtual. Si no tenés usuario institucional (por ejemplo, en el curso de ingreso), usá el que te dieron para el aula. En Córdoba (FRC) los alumnos entran con el mail completo (`<legajo>@<especialidad>.frc.utn.edu.ar`), no con el legajo solo; con una cuenta `@frc.utn.edu.ar`, con lo que va antes de la `@`. En Haedo (FRH) y San Nicolás (FRSN) se entra con el mail completo de Office 365 (en FRH, del estilo `<inicial><apellido><3 dígitos del legajo>@alumnos.frh.utn.edu.ar`). Se hace una sola vez: después el servidor renueva la sesión solo.
 
 ### 2. Agregarlo a tu cliente
 
@@ -120,14 +120,14 @@ utn-mcp login
 y en la config del cliente usás `"command": "utn-mcp"` sin argumentos.
 
 ### Regionales
-La regional se elige al iniciar sesión, de una lista con las regionales de la UTN. Buenos Aires (FRBA), Córdoba (FRC), Resistencia (FRRE) y Tucumán (FRT) ya están probadas. También está el aula de la Tecnicatura en Programación a distancia del SIED (TUP). El login se adapta solo: si el aula entra por SSO (Keycloak), como FRBA, usa el SSO; si no, el login directo de Moodle.
+La regional se elige al iniciar sesión, de una lista con las regionales de la UTN. Buenos Aires (FRBA), Córdoba (FRC), Resistencia (FRRE) y Tucumán (FRT) ya están probadas. También está el aula de la Tecnicatura en Programación a distancia del SIED (TUP). El login se adapta solo: si el aula entra por SSO, sea un Keycloak propio (FRBA) u Office 365 (Haedo, FRH, y San Nicolás, FRSN), usa el SSO; si no, el login directo de Moodle. Con Office 365 todavía no se pueden completar cuentas que piden segundo factor (MFA).
 
 La lista puede traer regionales que nadie probó todavía: su aula tiene habilitado el servicio que usa UTN-MCP, así que casi seguro anda. En un servidor hosteado, la primera persona que entra con una de esas la deja verificada para el resto. Las que no tienen el servicio habilitado aparecen como "todavía sin soporte": se pueden elegir, pero el login avisa que por ahora no se puede usar y no manda la contraseña.
 
 Si tu campus no está en la lista, abrí un [issue](https://github.com/nialvape/utn-mcp/issues) con la URL de su aula virtual para sumarlo. Mientras tanto, podés usarlo definiendo en un `.env` en la carpeta desde donde corrés `utn-mcp` (o en el entorno):
 ```bash
 UTN_AULA_BASE_URL=https://tu-campus.utn.edu.ar
-# UTN_SSO_HOST=auth.tu-campus.utn.edu.ar  # solo si usa Keycloak
+# UTN_SSO_HOST=auth.tu-campus.utn.edu.ar  # solo si entra por SSO: Keycloak, o login.microsoftonline.com si es Office 365
 ```
 Aparece como una opción más al iniciar sesión.
 

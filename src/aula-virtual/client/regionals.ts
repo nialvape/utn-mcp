@@ -1,21 +1,33 @@
 /**
  * Qué se sabe de si el MCP anda con el aula de una regional:
  * - `verified`: alguien ya entró y usó las tools.
- * - `candidate`: tiene habilitado el servicio `moodle_mobile_app` (y se sabe si entra por SSO), así que
+ * - `candidate`: tiene habilitado el servicio `moodle_mobile_app` (y se sabe cómo entra), así que
  *   casi seguro anda; se verifica con el primer login que funcione.
- * - `unsupported`: no tiene el servicio habilitado, o entra por un SSO que todavía no sabemos usar
- *   (Office 365); se puede elegir, pero todavía no se puede usar.
+ * - `unsupported`: no tiene el servicio habilitado, o entra por un login que todavía no sabemos usar;
+ *   se puede elegir, pero todavía no se puede usar.
  */
 export type RegionalSupport = "verified" | "candidate" | "unsupported";
 
-/** El aula virtual de una regional de la UTN. */
+/** Los SSO que sabemos usar: Keycloak propio de la regional u Office 365 (Microsoft Entra ID). */
+export type SsoProviderId = "keycloak" | "microsoft";
+
+/** El SSO por el que entra el aula: quién valida usuario y contraseña, y en qué host. */
+export interface Sso {
+    provider: SsoProviderId;
+    host: string;
+}
+
+/** El aula virtual de una regional de la UTN. Sin `sso`, entra con el login directo de Moodle. */
 export interface Regional {
     id: string;
     name: string;
     baseUrl: string;
-    ssoHost?: string;
+    sso?: Sso;
     support: RegionalSupport;
 }
+
+/** Office 365: cada regional tiene su tenant, pero el login es siempre en este host. */
+const MICROSOFT_SSO: Sso = { provider: "microsoft", host: "login.microsoftonline.com" };
 
 /**
  * El soporte de las que no son `verified` sale de `tool_mobile_get_public_config`, que Moodle contesta
@@ -28,7 +40,7 @@ const REGIONALS: Regional[] = [
         id: "frba",
         name: "Buenos Aires (FRBA)",
         baseUrl: "https://aulasvirtuales.frba.utn.edu.ar",
-        ssoHost: "auth.frba.utn.edu.ar",
+        sso: { provider: "keycloak", host: "auth.frba.utn.edu.ar" },
         support: "verified",
     },
     { id: "frch", name: "Chubut (FRCh)", baseUrl: "https://frch.cvg.utn.edu.ar", support: "candidate" },
@@ -37,11 +49,11 @@ const REGIONALS: Regional[] = [
     { id: "frc", name: "Córdoba (FRC)", baseUrl: "https://uv.frc.utn.edu.ar", support: "verified" },
     { id: "frd", name: "Delta (FRD)", baseUrl: "https://frd.cvg.utn.edu.ar", support: "candidate" },
     { id: "frgp", name: "General Pacheco (FRGP)", baseUrl: "https://frgp.cvg.utn.edu.ar", support: "candidate" },
-    // Office 365.
-    { id: "frh", name: "Haedo (FRH)", baseUrl: "https://frh.cvg.utn.edu.ar", support: "unsupported" },
+    { id: "frh", name: "Haedo (FRH)", baseUrl: "https://frh.cvg.utn.edu.ar", sso: MICROSOFT_SSO, support: "candidate" },
     { id: "frlp", name: "La Plata (FRLP)", baseUrl: "https://frlp.cvg.utn.edu.ar", support: "candidate" },
     { id: "frlr", name: "La Rioja (FRLR)", baseUrl: "https://frlr.cvg.utn.edu.ar", support: "candidate" },
-    // Tiene también frmdp.cvg.utn.edu.ar, pero ese no tiene el servicio habilitado y entra con Office 365.
+    // Tiene también frmdp.cvg.utn.edu.ar, pero ese entra con Office 365 y no tiene el mobile web service
+    // habilitado, así que no puede emitir token aunque se resuelva el login.
     { id: "frmdp", name: "Mar del Plata (FRMDP)", baseUrl: "https://campus.mdp.utn.edu.ar", support: "candidate" },
     // Sin el servicio habilitado.
     { id: "frm", name: "Mendoza (FRM)", baseUrl: "https://campusvirtual.frm.utn.edu.ar", support: "unsupported" },
@@ -52,8 +64,7 @@ const REGIONALS: Regional[] = [
     { id: "frre", name: "Resistencia (FRRE)", baseUrl: "https://frre.cvg.utn.edu.ar", support: "verified" },
     { id: "frro", name: "Rosario (FRRo)", baseUrl: "https://frro.cvg.utn.edu.ar", support: "candidate" },
     { id: "frsfco", name: "San Francisco (FRSFco)", baseUrl: "https://frsfco.cvg.utn.edu.ar", support: "candidate" },
-    // Office 365.
-    { id: "frsn", name: "San Nicolás (FRSN)", baseUrl: "https://frsn.cvg.utn.edu.ar", support: "unsupported" },
+    { id: "frsn", name: "San Nicolás (FRSN)", baseUrl: "https://frsn.cvg.utn.edu.ar", sso: MICROSOFT_SSO, support: "candidate" },
     { id: "frsr", name: "San Rafael (FRSR)", baseUrl: "https://campus.frsr.utn.edu.ar/moodle", support: "candidate" },
     { id: "frsc", name: "Santa Cruz (FRSC)", baseUrl: "https://frsc.cvg.utn.edu.ar", support: "candidate" },
     { id: "frsf", name: "Santa Fe (FRSF)", baseUrl: "https://campusvirtual.frsf.utn.edu.ar", support: "candidate" },
@@ -76,7 +87,7 @@ export class UnknownRegionalError extends Error {
         super(
             `"${regional}" no es una regional conocida. Las válidas son: ${availableRegionals().map((r) => r.id).join(", ")}. ` +
                 "Si tu campus no está en la lista, borrá UTN_REGIONAL y definí UTN_AULA_BASE_URL con la URL del aula " +
-                "(y UTN_SSO_HOST si usa Keycloak).",
+                "(y UTN_SSO_HOST si entra por SSO: el host del Keycloak, o login.microsoftonline.com si es Office 365).",
         );
     }
 }
@@ -98,7 +109,13 @@ function customRegional(): Regional | undefined {
     if (!raw) return undefined;
     const baseUrl = raw.replace(/\/+$/, "");
     const host = new URL(baseUrl).host;
-    return { id: host, name: host, baseUrl, ssoHost: process.env.UTN_SSO_HOST?.trim() || undefined, support: "verified" };
+    const ssoHost = process.env.UTN_SSO_HOST?.trim();
+    const sso: Sso | undefined = !ssoHost
+        ? undefined
+        : ssoHost === MICROSOFT_SSO.host
+          ? MICROSOFT_SSO
+          : { provider: "keycloak", host: ssoHost };
+    return { id: host, name: host, baseUrl, sso, support: "verified" };
 }
 
 /**
