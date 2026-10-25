@@ -2,7 +2,7 @@ import type { SessionStore } from "../../shared/store/session-store.js";
 import { loadCredentials } from "./credentials.js";
 import { defaultRegional, findRegional, type Regional } from "./regionals.js";
 import type { AulaSession } from "./session.js";
-import { fetchToken, LoginRequiredError } from "./sso-login.js";
+import { fetchToken, LoginRequiredError, MfaRequiredError } from "./sso-login.js";
 
 /** Con qué nombre guarda el aula su sesión en el store. */
 export const AULA_PLATFORM = "aula";
@@ -59,7 +59,10 @@ export class StoredAulaSession implements AulaSession {
             (credentials.regional ?? defaultRegional().id) === regional.id;
         if (!credentials || !sameUser) throw this.loginRequired("La sesión del aula venció.");
 
-        const token = await fetchToken(regional, credentials);
+        const token = await fetchToken(regional, credentials).catch((e: unknown) => {
+            // Sin el usuario delante no hay quién conteste el MFA: tiene que volver a entrar él.
+            throw e instanceof MfaRequiredError ? this.loginRequired("Tu cuenta de Microsoft pide un segundo factor (MFA).") : e;
+        });
         // Sin `...stored`: las sesiones guardadas antes traen cookies, que ya no se usan.
         const data: StoredAulaData = { username: stored.username, token };
         await this.store.saveSession(this.userId, AULA_PLATFORM, JSON.stringify(data));

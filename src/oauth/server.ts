@@ -6,14 +6,15 @@ import {
     getOAuthProtectedResourceMetadataUrl,
     type OAuthMetadata,
 } from "@modelcontextprotocol/server";
-import { linkAulaAccount } from "../aula-virtual/client/link.js";
+import { linkAulaAccount, type LinkedAccount } from "../aula-virtual/client/link.js";
 import { availableRegionals, defaultRegional, type Regional } from "../aula-virtual/client/regionals.js";
-import { InvalidCredentialsError } from "../aula-virtual/client/sso-login.js";
+import { InvalidCredentialsError, MfaError, type MfaPrompt } from "../aula-virtual/client/sso-login.js";
 import { logger } from "../shared/logger.js";
 import { escapeHtml, page } from "../shared/pages.js";
 import type { SessionStore } from "../shared/store/session-store.js";
 import type { AccessPolicy } from "./access.js";
 import { Expiring, RateLimiter } from "./expiring.js";
+import { PendingLogin } from "./pending-login.js";
 import { describeRedirect, redirectTrust, type RedirectAllowlist } from "./redirects.js";
 
 /** Duración del access token, en segundos: una baja de acceso se aplica a más tardar en este tiempo. */
@@ -54,6 +55,19 @@ interface PendingAuthorization {
     resource?: string;
 }
 
+/** Vuelve a mostrar el formulario de login con un error, en el request que esté contestando. */
+type Retry = (res: Response, error: string) => void;
+
+/** Un login con usuario y contraseña ya mandados, que puede quedar esperando el segundo factor. */
+interface UtnLogin {
+    flow: PendingLogin<LinkedAccount>;
+    regional: Regional;
+    username: string;
+    retry: Retry;
+    /** Lo que se hace con la cuenta cuando el login termina: emitir el code o avisar que se renovó. */
+    finish: (res: Response, account: LinkedAccount) => Promise<void>;
+}
+
 interface IssuedCode {
     userId: number;
     clientId: string;
@@ -89,6 +103,7 @@ export function mountOAuth(app: Express, { issuer, store, access, sameOrigin, re
 
     const pending = new Expiring<PendingAuthorization>(PENDING_TTL_MS);
     const codes = new Expiring<IssuedCode>(CODE_TTL_MS);
+    const secondFactors = new Expiring<UtnLogin>(PENDING_TTL_MS);
     const limiter = new RateLimiter(LOGIN_ATTEMPTS, LOGIN_WINDOW_MS);
     const registerLimiter = new RateLimiter(REGISTER_ATTEMPTS, REGISTER_WINDOW_MS);
     const form = express.urlencoded({ extended: false, limit: "16kb" });
@@ -184,7 +199,7 @@ export function mountOAuth(app: Express, { issuer, store, access, sameOrigin, re
         if (!request) return void errorPage(res, 400, "Pedido vencido", "Pasó demasiado tiempo. Volvé a conectar desde tu app.");
 
         const list = await regionals();
-        const retry = (error: string) =>
+        const retry: Retry = (res, error) =>
             res.type("html").send(
                 loginPage({
                     action: "/authorize",
@@ -198,23 +213,25 @@ export function mountOAuth(app: Express, { issuer, store, access, sameOrigin, re
                 }),
             );
         if (request.unknownRedirect && req.body?.acepto !== "si") {
-            return void retry("Para conectar una app que no es un cliente conocido tenés que aceptar el aviso.");
+            return void retry(res, "Para conectar una app que no es un cliente conocido tenés que aceptar el aviso.");
         }
-        const account = await login(req, list, retry);
-        if (!account) return;
+        await login(req, res, list, retry, async (res, account) => {
+            const decision = await access({ regional: account.regional.id, username: account.username, email: account.email });
+            if (!decision.allowed) return void deniedPage(res, decision.reason, decision.url);
 
-        const decision = await access({ regional: account.regional.id, username: account.username, email: account.email });
-        if (!decision.allowed) return void deniedPage(res, decision.reason, decision.url);
-
-        pending.take(id);
-        const code = codes.add({
-            userId: account.userId,
-            clientId: request.clientId,
-            redirectUri: request.redirectUri,
-            codeChallenge: request.codeChallenge,
+            // Con el segundo factor de por medio, el pedido pudo vencer mientras el usuario lo completaba.
+            if (!pending.take(id)) {
+                return void errorPage(res, 400, "Pedido vencido", "Pasó demasiado tiempo. Volvé a conectar desde tu app.");
+            }
+            const code = codes.add({
+                userId: account.userId,
+                clientId: request.clientId,
+                redirectUri: request.redirectUri,
+                codeChallenge: request.codeChallenge,
+            });
+            logger.info(`OAuth: ${account.username} (${account.regional.id}) autorizó a ${request.clientName ?? request.clientId}.`);
+            redirectWith(res, request.redirectUri, { code, state: request.state, iss: issuer });
         });
-        logger.info(`OAuth: ${account.username} (${account.regional.id}) autorizó a ${request.clientName ?? request.clientId}.`);
-        redirectWith(res, request.redirectUri, { code, state: request.state, iss: issuer });
     });
 
     app.post("/token", cors, form, express.json({ limit: "16kb" }), async (req, res) => {
@@ -270,7 +287,7 @@ export function mountOAuth(app: Express, { issuer, store, access, sameOrigin, re
     app.get("/login", async (_req, res) => void res.type("html").send(loginPage({ action: "/login", regionals: await regionals() })));
     app.post("/login", sameOrigin, form, async (req, res) => {
         const list = await regionals();
-        const account = await login(req, list, (error) =>
+        const retry: Retry = (res, error) =>
             res.type("html").send(
                 loginPage({
                     action: "/login",
@@ -278,47 +295,64 @@ export function mountOAuth(app: Express, { issuer, store, access, sameOrigin, re
                     regional: req.body?.regional,
                     error,
                 }),
-            ),
-        );
-        if (!account) return;
-        logger.info(`OAuth: ${account.username} (${account.regional.id}) renovó su sesión del aula.`);
-        res.type("html").send(page("Listo", "<p>Ya renovamos tu sesión del aula. Volvé al chat y pedile al agente que reintente.</p>"));
+            );
+        await login(req, res, list, retry, async (res, account) => {
+            logger.info(`OAuth: ${account.username} (${account.regional.id}) renovó su sesión del aula.`);
+            res.type("html").send(page("Listo", "<p>Ya renovamos tu sesión del aula. Volvé al chat y pedile al agente que reintente.</p>"));
+        });
+    });
+
+    // La respuesta a lo que pidió el segundo factor de Microsoft: el método, el código o "ya aprobé".
+    app.post("/segundo-factor", sameOrigin, form, async (req, res) => {
+        const id = String(req.body?.login ?? "");
+        const utnLogin = secondFactors.get(id);
+        if (!utnLogin) return void errorPage(res, 400, "Login vencido", "Pasó demasiado tiempo. Volvé a iniciar sesión.");
+        utnLogin.flow.answer(String(req.body?.respuesta ?? ""));
+        await advance(res, utnLogin, id);
     });
 
     /** Entra al aula con lo que mandó el formulario; si falla, vuelve a mostrarlo con el error. */
-    async function login(req: Request, list: Regional[], retry: (error: string) => void) {
+    async function login(req: Request, res: Response, list: Regional[], retry: Retry, finish: UtnLogin["finish"]) {
         if (!limiter.allow(req.ip ?? "desconocida")) {
-            retry("Demasiados intentos. Esperá unos minutos y probá de nuevo.");
-            return null;
+            return retry(res, "Demasiados intentos. Esperá unos minutos y probá de nuevo.");
         }
         const username = String(req.body?.usuario ?? "").trim();
         const password = String(req.body?.contrasena ?? "");
-        if (!username || !password) {
-            retry("Completá usuario y contraseña.");
-            return null;
-        }
+        if (!username || !password) return retry(res, "Completá usuario y contraseña.");
         const regional = list.find((r) => r.id === String(req.body?.regional ?? ""));
-        if (!regional) {
-            retry("Elegí tu regional de la lista.");
-            return null;
-        }        
+        if (!regional) return retry(res, "Elegí tu regional de la lista.");
         if (regional.support === "unsupported") {
-            retry(`Todavía no hay soporte para ${regional.name}: su aula todavía no funciona con UTN-MCP.`);
-            return null;
+            return retry(res, `Todavía no hay soporte para ${regional.name}: su aula todavía no funciona con UTN-MCP.`);
         }
+        const flow = new PendingLogin((secondFactor) => linkAulaAccount(store, regional, { username, password }, secondFactor));
+        await advance(res, { flow, regional, username, retry, finish });
+    }
+
+    /**
+     * Sigue el login hasta que termina o pide el segundo factor: entonces muestra la página para
+     * contestarlo y lo guarda hasta la respuesta. `id` es el de un login que ya estaba esperando.
+     */
+    async function advance(res: Response, utnLogin: UtnLogin, id?: string) {
+        const { flow, regional, username, retry, finish } = utnLogin;
         try {
-            return await linkAulaAccount(store, regional, { username, password });
+            const step = await flow.next();
+            if ("prompt" in step) {
+                return void res.type("html").send(secondFactorPage(id ?? secondFactors.add(utnLogin), step.prompt));
+            }
+            if (id) secondFactors.take(id);
+            await finish(res, step.done);
         } catch (e) {
-            if (e instanceof InvalidCredentialsError) retry("La UTN rechazó el usuario o la contraseña.");
+            if (id) secondFactors.take(id);
+            if (e instanceof InvalidCredentialsError) retry(res, "La UTN rechazó el usuario o la contraseña.");
+            else if (e instanceof MfaError) retry(res, e.message);
             else if (regional.support === "candidate") {
                 // Nadie la había usado acá: lo más probable es que todavía no ande, no que esté caída.
                 logger.warn(`Regional ${regional.id} sin verificar, falló el login de ${username}: ${(e as Error).message}`);
-                retry(`No pudimos usar el aula de ${regional.name}: puede que todavía no ande con UTN-MCP.`);
+                retry(res, `No pudimos usar el aula de ${regional.name}: puede que todavía no ande con UTN-MCP.`);
             } else {
                 logger.error(`Login de ${username} (${regional.id}): ${(e as Error).message}`);
-                retry("No pudimos entrar al aula. Puede que esté caída: probá de nuevo en unos minutos.");
+                retry(res, "No pudimos entrar al aula. Puede que esté caída: probá de nuevo en unos minutos.");
             }
-            return null;
         }
     }
 
@@ -365,6 +399,37 @@ function errorPage(res: Response, status: number, title: string, message: string
 function deniedPage(res: Response, reason: string, url?: string) {
     const link = url ? `<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>` : "";
     res.status(403).type("html").send(page("Sin acceso", `<p>${escapeHtml(reason)}</p>${link}`));
+}
+
+/** La página del segundo factor de Microsoft: elegir el método, tipear el código o avisar que ya se aprobó. */
+function secondFactorPage(id: string, prompt: MfaPrompt): string {
+    const hidden = `<input type="hidden" name="login" value="${escapeHtml(id)}">`;
+    const formWith = (fields: string, button: string) =>
+        `<form method="post" action="/segundo-factor">${hidden}${fields}<button type="submit">${button}</button></form>`;
+    if (prompt.step === "choose") {
+        const options = prompt.methods
+            .map(
+                (m, i) =>
+                    `<label class=acepto><input type="radio" name="respuesta" value="${escapeHtml(m.id)}"${i === 0 ? " checked" : ""}>` +
+                    `<span>${escapeHtml(m.label)}</span></label>`,
+            )
+            .join("");
+        return page("Segundo factor", "<p>Tu cuenta de Microsoft pide un segundo factor. ¿Con cuál seguís?</p>" + formWith(options, "Seguir"));
+    }
+    if (prompt.step === "code") {
+        const error = prompt.retry ? "<p class=error>El código no era correcto. Probá de nuevo.</p>" : "";
+        const field =
+            `<label>${escapeHtml(prompt.method.label)}<input name="respuesta" inputmode="numeric" ` +
+            `autocomplete="one-time-code" autocapitalize="none" required></label>`;
+        return page("Segundo factor", error + formWith(field, "Verificar"));
+    }
+    const number = prompt.number ? `<p>Cuando te lo pida, tocá este número:</p><p class=numero>${prompt.number}</p>` : "";
+    return page(
+        "Segundo factor",
+        `<p>Aprobá el inicio de sesión en el celular (${escapeHtml(prompt.method.label)}).</p>` +
+            number +
+            formWith(`<input type="hidden" name="respuesta" value="ok">`, "Ya aprobé"),
+    );
 }
 
 function loginPage(o: {

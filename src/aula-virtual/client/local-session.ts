@@ -5,7 +5,7 @@ import { logger } from "../../shared/logger.js";
 import { loadCredentials, type Credentials } from "./credentials.js";
 import { defaultRegional, findRegional, type Regional } from "./regionals.js";
 import type { AulaSession } from "./session.js";
-import { fetchToken, LoginRequiredError } from "./sso-login.js";
+import { fetchToken, LoginRequiredError, type SecondFactor } from "./sso-login.js";
 
 interface StoredSession {
     token: string | null;
@@ -44,11 +44,11 @@ export class LocalSession implements AulaSession {
         return this.refreshing;
     }
 
-    /** Obtiene un token nuevo y lo guarda. */
-    async login(regional: Regional, credentials: Credentials | null): Promise<string> {
+    /** Obtiene un token nuevo y lo guarda. Sin `secondFactor` (al renovar solo), una cuenta con MFA no entra. */
+    async login(regional: Regional, credentials: Credentials | null, secondFactor?: SecondFactor): Promise<string> {
         if (!credentials) throw new LoginRequiredError();
         logger.info(`Obteniendo token del aula virtual de ${regional.name}...`);
-        const token = await fetchToken(regional, credentials);
+        const token = await fetchToken(regional, credentials, secondFactor);
         await this.write({ token, obtainedAt: new Date().toISOString(), regional: regional.id });
         return token;
     }

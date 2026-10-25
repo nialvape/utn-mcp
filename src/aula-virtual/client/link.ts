@@ -3,7 +3,7 @@ import { getOwnUser, getUserCourses } from "./client.js";
 import type { Credentials } from "./credentials.js";
 import type { Regional } from "./regionals.js";
 import type { AulaSession } from "./session.js";
-import { fetchToken } from "./sso-login.js";
+import { fetchToken, type SecondFactor } from "./sso-login.js";
 import { AULA_PLATFORM, type StoredAulaData } from "./stored-session.js";
 
 export interface LinkedAccount {
@@ -21,13 +21,15 @@ export interface LinkedAccount {
  * guarda la sesión (el token). La contraseña se usa solo acá: no se guarda en ningún lado.
  * Lo usan `utn-mcp login --http`, el login por OAuth de la versión hosteada y `/admin/verificar`.
  * `regional` tiene que venir con su soporte en este servidor (`availableRegionals` con las verificadas).
+ * `secondFactor` contesta el MFA de Microsoft si la cuenta lo pide.
  */
 export async function linkAulaAccount(
     store: SessionStore,
     regional: Regional,
     credentials: Credentials,
+    secondFactor?: SecondFactor,
 ): Promise<LinkedAccount> {
-    const token = await fetchToken(regional, credentials);
+    const token = await fetchToken(regional, credentials, secondFactor);
 
     // El token recién emitido: si falla, no hay con qué renovarlo.
     const fresh: AulaSession = {

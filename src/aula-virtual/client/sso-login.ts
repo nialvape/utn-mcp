@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
 import { CookieJar } from "tough-cookie";
 import type { Credentials } from "./credentials.js";
 import { UnsupportedRegionalError, type Regional, type SsoProviderId } from "./regionals.js";
@@ -30,7 +31,7 @@ interface SsoProvider {
     /** El botón de la página de login de Moodle que lleva al SSO. */
     link: RegExp;
     /** Manda usuario y contraseña al formulario del SSO. Si los rechaza, la página queda en el SSO. */
-    submit(jar: CookieJar, page: Page, credentials: Credentials): Promise<Landing>;
+    submit(jar: CookieJar, page: Page, credentials: Credentials, secondFactor?: SecondFactor): Promise<Landing>;
     /** El motivo del rechazo que muestra el SSO. */
     loginError(html: string): string | undefined;
 }
@@ -57,8 +58,10 @@ const PROVIDERS: Record<SsoProviderId, SsoProvider> = {
  *   plugin de mobile launch, que puede estar deshabilitado); si falla, flujo de launch.php.
  * Las cookies se usan solo durante el login y se descartan: las sesiones de Moodle y del SSO duran
  * horas y el token, semanas, así que no sirven para renovarlo.
+ * `secondFactor` contesta el MFA de Microsoft; sin él (las renovaciones solas), una cuenta con MFA da
+ * `MfaRequiredError`.
  */
-export async function fetchToken(regional: Regional, credentials: Credentials): Promise<string> {
+export async function fetchToken(regional: Regional, credentials: Credentials, secondFactor?: SecondFactor): Promise<string> {
     if (regional.support === "unsupported") throw new UnsupportedRegionalError(regional);
     const { baseUrl, sso } = regional;
     const jar = new CookieJar();
@@ -83,7 +86,7 @@ export async function fetchToken(regional: Regional, credentials: Credentials): 
         if ("token" in landing) return landing.token;
 
         if (new URL(landing.url).host === sso.host) {
-            landing = await provider.submit(jar, landing, credentials);
+            landing = await provider.submit(jar, landing, credentials, secondFactor);
             if ("token" in landing) return landing.token;
             if (new URL(landing.url).host === sso.host) {
                 // Aspirantes del ingreso y algunas tecnicaturas no tienen cuenta en el SSO: entran con el login de Moodle.
@@ -119,15 +122,64 @@ export async function fetchToken(regional: Regional, credentials: Credentials): 
     throw unexpected(landing.url);
 }
 
-export class MfaRequiredError extends Error {
-    constructor(reason?: string) {
+/** La cuenta pide MFA y no hay quién lo conteste: pasa al renovar solo, sin el usuario delante. */
+export class MfaRequiredError extends LoginRequiredError {
+    constructor() {
         super(
-            "Tu cuenta de Microsoft pide un segundo factor (código, app o similar), que UTN-MCP todavía no puede " +
-                "completar solo." + (reason ? ` Microsoft dijo: ${reason}` : ""),
+            "Tu cuenta de Microsoft pide un segundo factor (MFA), que solo se completa al iniciar sesión: " +
+                "corré `utn-mcp login`.",
         );
         this.name = "MfaRequiredError";
     }
 }
+
+/** El segundo factor no se pudo completar; el mensaje dice por qué y se le puede mostrar al usuario. */
+export class MfaError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "MfaError";
+    }
+}
+
+/** Un método de segundo factor de la cuenta de Microsoft que sabemos completar. */
+export interface MfaMethod {
+    /** El `authMethodId` de Microsoft (ej. `PhoneAppNotification`, `OneWaySMS`). */
+    id: string;
+    /** "approve": se aprueba en el celular (notificación o llamada); "code": se tipea un código. */
+    kind: "approve" | "code";
+    /** Para mostrarle al usuario, con el teléfono enmascarado si Microsoft lo da (ej. "SMS al +XX XXXXXXXX12"). */
+    label: string;
+}
+
+/** Lo que el login le pregunta al usuario para completar el segundo factor. */
+export type MfaPrompt =
+    | { step: "choose"; methods: MfaMethod[] }
+    | { step: "code"; method: MfaMethod; retry: boolean }
+    /** `number` es el que Authenticator pide tipear al aprobar, si lo pide. */
+    | { step: "approve"; method: MfaMethod; number?: number };
+
+/**
+ * Quien contesta el segundo factor: el CLI o la página de login del servidor. Con "choose" devuelve el
+ * `id` del método; con "code", el código; con "approve", cualquier cosa cuando el usuario ya aprobó.
+ */
+export type SecondFactor = (prompt: MfaPrompt) => Promise<string>;
+
+/** Los `authMethodId` que se completan sin navegador: los demás (FIDO, Windows Hello) necesitan uno. */
+const MFA_METHODS: Record<string, { kind: MfaMethod["kind"]; label: string }> = {
+    PhoneAppNotification: { kind: "approve", label: "Aprobar en Microsoft Authenticator" },
+    CompanionAppsNotification: { kind: "approve", label: "Aprobar en Microsoft Authenticator" },
+    PhoneAppOTP: { kind: "code", label: "Código de Microsoft Authenticator" },
+    OneWaySMS: { kind: "code", label: "Código por SMS" },
+    TwoWayVoiceMobile: { kind: "approve", label: "Llamada al celular" },
+    TwoWayVoiceAlternateMobile: { kind: "approve", label: "Llamada al celular alternativo" },
+    TwoWayVoiceOffice: { kind: "approve", label: "Llamada al teléfono de la oficina" },
+};
+
+/** Intentos de código antes de cortar: Microsoft también bloquea después de varios. */
+const MAX_CODE_ATTEMPTS = 3;
+/** Cada cuánto se pregunta si ya se aprobó, en milisegundos, y cuántas veces (un minuto en total). */
+const APPROVE_POLL_MS = 2_000;
+const APPROVE_POLLS = 30;
 
 /** El `$Config` de las páginas de login de Microsoft: los campos que necesita el flujo. */
 interface AadConfig {
@@ -137,18 +189,38 @@ interface AadConfig {
     urlPost?: string;
     sErrorCode?: string;
     strServiceExceptionMessage?: string;
-    arrUserProofs?: unknown[];
+    /** Los métodos de MFA de la cuenta: aparecen en la página que pide el segundo factor. */
+    arrUserProofs?: { authMethodId?: string; display?: string; isDefault?: boolean }[];
+    urlBeginAuth?: string;
+    urlEndAuth?: string;
 }
 
-/** Cantidad máxima de pasos de Microsoft entre la contraseña y la vuelta al aula (KMSI y similares). */
-const MAX_MICROSOFT_STEPS = 6;
+/** Respuesta de `SAS/BeginAuth` y `SAS/EndAuth`, los endpoints JSON del segundo factor. */
+interface SasResponse {
+    Success?: boolean;
+    ResultValue?: string;
+    Message?: string;
+    SessionId?: string;
+    FlowToken?: string;
+    Ctx?: string;
+    /** El número que Authenticator pide tipear; 0 si no pide. */
+    Entropy?: number;
+}
+
+/** Cantidad máxima de pasos de Microsoft entre la contraseña y la vuelta al aula (MFA, KMSI y similares). */
+const MAX_MICROSOFT_STEPS = 8;
 
 /**
  * Formulario de Office 365 (Microsoft Entra ID). No es un `<form>`: los datos están en el `$Config` de
- * la página. Después de la contraseña puede venir "¿Mantener la sesión iniciada?" antes del formulario
- * que vuelve al aula con el `code`. No completa MFA ni logins federados (ADFS).
+ * la página. Después de la contraseña pueden venir el segundo factor y "¿Mantener la sesión iniciada?"
+ * antes del formulario que vuelve al aula con el `code`. No completa logins federados (ADFS).
  */
-async function submitMicrosoftForm(jar: CookieJar, page: Page, { username, password }: Credentials): Promise<Landing> {
+async function submitMicrosoftForm(
+    jar: CookieJar,
+    page: Page,
+    { username, password }: Credentials,
+    secondFactor?: SecondFactor,
+): Promise<Landing> {
     const ssoHost = new URL(page.url).host;
     const cfg = parseAadConfig(page.html);
     if (!cfg?.urlPost || !cfg.sFT) {
@@ -179,7 +251,12 @@ async function submitMicrosoftForm(jar: CookieJar, page: Page, { username, passw
         }
 
         const step = parseAadConfig(landing.html);
-        if (step?.arrUserProofs?.length) throw new MfaRequiredError(step.strServiceExceptionMessage);
+        // Antes que `sErrorCode`: la página del segundo factor puede traer el AADSTS50074 ("hace falta MFA").
+        if (step?.arrUserProofs?.length) {
+            if (!secondFactor) throw new MfaRequiredError();
+            landing = await completeMfa(jar, landing, step, username, secondFactor);
+            continue;
+        }
         if (step?.sErrorCode) return landing;
         if (step?.urlPost) {
             landing = await follow(jar, new URL(step.urlPost, landing.url).toString(), {
@@ -201,6 +278,114 @@ async function submitMicrosoftForm(jar: CookieJar, page: Page, { username, passw
         throw unexpected(landing.url);
     }
     throw new Error("Demasiados pasos en el login de Microsoft.");
+}
+
+/**
+ * El segundo factor de Microsoft, con los mismos endpoints que usa su página: `BeginAuth` lo arranca
+ * (manda la notificación, el SMS o la llamada), `EndAuth` lo verifica (con el código, o preguntando si
+ * ya se aprobó) y `ProcessAuth` sigue el login, que vuelve a la página siguiente (KMSI o el aula).
+ */
+async function completeMfa(
+    jar: CookieJar,
+    page: Page,
+    cfg: AadConfig,
+    username: string,
+    secondFactor: SecondFactor,
+): Promise<Landing> {
+    const proofs = cfg.arrUserProofs ?? [];
+    const methods = proofs.flatMap(({ authMethodId: id, display }): MfaMethod[] => {
+        const known = id ? MFA_METHODS[id] : undefined;
+        return id && known ? [{ id, kind: known.kind, label: display ? `${known.label} (${display})` : known.label }] : [];
+    });
+    if (!methods.length) {
+        const ids = proofs.map((p) => p.authMethodId).join(", ");
+        throw new MfaError(
+            `Tu cuenta de Microsoft solo tiene métodos de segundo factor que necesitan el navegador (${ids}). ` +
+                "Agregá Microsoft Authenticator o un teléfono en https://mysignins.microsoft.com/security-info y volvé a intentar.",
+        );
+    }
+    if (!cfg.urlBeginAuth || !cfg.urlEndAuth || !cfg.urlPost) {
+        throw new Error("No se encontró el formulario del segundo factor de Microsoft; puede que haya cambiado.");
+    }
+
+    // Arranca marcado el que Microsoft tiene por defecto; si hay uno solo, no se pregunta.
+    const preferred = proofs.find((p) => p.isDefault)?.authMethodId;
+    methods.sort((a, b) => Number(b.id === preferred) - Number(a.id === preferred));
+    const chosenId = methods.length > 1 ? await secondFactor({ step: "choose", methods }) : methods[0].id;
+    const method = methods.find((m) => m.id === chosenId);
+    if (!method) throw new MfaError("Ese método de segundo factor no está entre los de tu cuenta.");
+
+    const sasUrl = (url: string) => new URL(url, page.url).toString();
+    const begin = await postSas(jar, sasUrl(cfg.urlBeginAuth), {
+        AuthMethodId: method.id,
+        Method: "BeginAuth",
+        ctx: cfg.sCtx ?? "",
+        flowToken: cfg.sFT ?? "",
+    });
+    if (!begin.Success) throw new MfaError(`Microsoft no pudo arrancar el segundo factor (${begin.Message || begin.ResultValue}).`);
+
+    const endAuth = (extra: Record<string, unknown>) =>
+        postSas(jar, sasUrl(cfg.urlEndAuth!), {
+            Method: "EndAuth",
+            AuthMethodId: method.id,
+            SessionId: begin.SessionId,
+            FlowToken: begin.FlowToken,
+            Ctx: begin.Ctx,
+            ...extra,
+        });
+
+    let end: SasResponse | undefined;
+    let otc = "";
+    if (method.kind === "code") {
+        for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS && !end?.Success; attempt++) {
+            otc = (await secondFactor({ step: "code", method, retry: attempt > 0 })).replace(/\s/g, "");
+            end = await endAuth({ AdditionalAuthData: otc, PollCount: 1 });
+            if (!end.Success && !/incorrect|wrongcode/i.test(end.ResultValue ?? "")) break;
+        }
+    } else {
+        await secondFactor({ step: "approve", method, number: begin.Entropy || undefined });
+        for (let poll = 1; poll <= APPROVE_POLLS; poll++) {
+            end = await endAuth({ PollCount: poll });
+            if (end.Success || end.ResultValue !== "AuthenticationPending") break;
+            await sleep(APPROVE_POLL_MS);
+        }
+    }
+    if (!end?.Success) {
+        const reason = end?.ResultValue === "AuthenticationPending" ? "no llegó la aprobación a tiempo" : end?.Message || end?.ResultValue;
+        throw new MfaError(`Microsoft no aceptó el segundo factor (${reason}). Volvé a iniciar sesión para probar de nuevo.`);
+    }
+
+    return follow(jar, sasUrl(cfg.urlPost), {
+        method: "POST",
+        body: new URLSearchParams({
+            request: end.Ctx ?? begin.Ctx ?? "",
+            mfaAuthMethod: method.id,
+            flowToken: end.FlowToken ?? begin.FlowToken ?? "",
+            canary: cfg.canary ?? "",
+            otc,
+            login: username,
+            hideSmsInMfaProofs: "false",
+        }),
+    });
+}
+
+/** POST JSON a `SAS/BeginAuth` o `SAS/EndAuth`, con las cookies del login. */
+async function postSas(jar: CookieJar, url: string, body: Record<string, unknown>): Promise<SasResponse> {
+    const cookie = await jar.getCookieString(url);
+    const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json", ...(cookie ? { cookie } : {}) },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    for (const setCookie of res.headers.getSetCookie()) {
+        await jar.setCookie(setCookie, url, { ignoreError: true });
+    }
+    try {
+        return (await res.json()) as SasResponse;
+    } catch {
+        throw new Error(`Respuesta inesperada del segundo factor de Microsoft (${res.status}).`);
+    }
 }
 
 /** El motivo del rechazo en una página de Microsoft (ej. AADSTS50126: usuario o contraseña incorrectos). */

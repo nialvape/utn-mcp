@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import express, { type Express, type RequestHandler } from "express";
 import { linkAulaAccount } from "../aula-virtual/client/link.js";
 import { availableRegionals, type RegionalSupport } from "../aula-virtual/client/regionals.js";
-import { InvalidCredentialsError } from "../aula-virtual/client/sso-login.js";
+import { InvalidCredentialsError, MfaError, MfaRequiredError } from "../aula-virtual/client/sso-login.js";
 import { AULA_PLATFORM } from "../aula-virtual/client/stored-session.js";
 import { logger } from "../shared/logger.js";
 import type { SessionStore, StoredUser } from "../shared/store/session-store.js";
@@ -118,6 +118,13 @@ export function mountAdmin(app: Express, store: SessionStore, secret: string) {
         } catch (e) {
             if (e instanceof InvalidCredentialsError) {
                 return void res.status(401).json({ error: "credenciales", motivo: "El aula rechazó el usuario o la contraseña." });
+            }
+            // Esta API no tiene a quién pedirle el segundo factor: el usuario tiene que entrar por la página de login.
+            if (e instanceof MfaRequiredError || e instanceof MfaError) {
+                return void res.status(422).json({
+                    error: "mfa",
+                    motivo: "La cuenta de Microsoft pide un segundo factor (MFA): que entre por la página de login.",
+                });
             }
             logger.warn(`Verificación de ${username} (${regional.id}): ${(e as Error).message}`);
             res.status(502).json({ error: "aula", motivo: `No pudimos entrar al aula de ${regional.name}.` });

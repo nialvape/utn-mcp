@@ -41,7 +41,8 @@ button:hover{background:var(--accent)}
 .aviso{border:1px solid var(--err);padding:0 1rem;margin:1rem 0}
 label.acepto{flex-direction:row;align-items:flex-start;gap:.6rem;font:13px/1.5 ui-sans-serif,system-ui,sans-serif;
 text-transform:none;letter-spacing:normal;color:var(--ink)}
-input[type=checkbox]{padding:0;margin:.2rem 0 0;accent-color:var(--accent)}
+input[type=checkbox],input[type=radio]{padding:0;margin:.2rem 0 0;accent-color:var(--accent)}
+.numero{margin:1rem 0;font:600 2.5rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;text-align:center}
 ul{padding-left:1.2rem}
 ::selection{background:var(--accent);color:var(--paper)}
 `.replace(/\n/g, "");

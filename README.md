@@ -120,7 +120,7 @@ utn-mcp login
 y en la config del cliente usás `"command": "utn-mcp"` sin argumentos.
 
 ### Regionales
-La regional se elige al iniciar sesión, de una lista con las regionales de la UTN. Buenos Aires (FRBA), Córdoba (FRC), Resistencia (FRRE) y Tucumán (FRT) ya están probadas. También está el aula de la Tecnicatura en Programación a distancia del SIED (TUP). El login se adapta solo: si el aula entra por SSO, sea un Keycloak propio (FRBA) u Office 365 (Haedo, FRH, y San Nicolás, FRSN), usa el SSO; si no, el login directo de Moodle. Con Office 365 todavía no se pueden completar cuentas que piden segundo factor (MFA).
+La regional se elige al iniciar sesión, de una lista con las regionales de la UTN. Buenos Aires (FRBA), Córdoba (FRC), Resistencia (FRRE) y Tucumán (FRT) ya están probadas. También está el aula de la Tecnicatura en Programación a distancia del SIED (TUP). El login se adapta solo: si el aula entra por SSO, sea un Keycloak propio (FRBA) u Office 365 (Haedo, FRH, y San Nicolás, FRSN), usa el SSO; si no, el login directo de Moodle. Si tu cuenta de Office 365 pide segundo factor (MFA), el login te pregunta con qué método seguir y te pide el código o que apruebes en el celular. Como el servidor renueva la sesión sin vos delante, con MFA te va a pedir que vuelvas a iniciar sesión cuando venza (dura semanas).
 
 La lista puede traer regionales que nadie probó todavía: su aula tiene habilitado el servicio que usa UTN-MCP, así que casi seguro anda. En un servidor hosteado, la primera persona que entra con una de esas la deja verificada para el resto. Las que no tienen el servicio habilitado aparecen como "todavía sin soporte": se pueden elegir, pero el login avisa que por ahora no se puede usar y no manda la contraseña.
 
