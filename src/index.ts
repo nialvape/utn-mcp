@@ -8,6 +8,7 @@ import { LocalSession } from "./aula-virtual/client/local-session.js";
 import { defaultRegional } from "./aula-virtual/client/regionals.js";
 import { StoredAulaSession } from "./aula-virtual/client/stored-session.js";
 import { runLogin } from "./aula-virtual/login.js";
+import { runAutogestionLogin } from "./autogestion/login.js";
 import { startHttpServer, userIdOf } from "./http.js";
 import { accessPolicyFromEnv } from "./oauth/access.js";
 import { redirectAllowlistFromEnv } from "./oauth/redirects.js";
@@ -21,6 +22,7 @@ const USAGE = `Uso:
   utn-mcp --http [--host H] [--port N]  servidor MCP por HTTP (por defecto 127.0.0.1:3000)
   utn-mcp login           guardar credenciales de la UTN y obtener el primer token
   utn-mcp login --http    lo mismo, para el modo HTTP: guarda la sesión y emite el token del cliente
+  utn-mcp login autogestion  guardar legajo y contraseña de la autogestión de tu regional
 
 Si hay un .env en la carpeta actual, se lee al arrancar (ver .env.example).`;
 
@@ -44,7 +46,11 @@ async function main() {
     defaultRegional();
 
     if (positionals[0] === "login") {
-        await runLogin(values.http);
+        if (positionals[1] === "autogestion") {
+            await runAutogestionLogin((await new LocalSession().getRegional()).id);
+        } else {
+            await runLogin(values.http);
+        }
         return;
     }
 

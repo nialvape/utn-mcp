@@ -1,4 +1,10 @@
-const ENTITIES: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+// Las con tildes/eñe son las que usan Sysacad y el aula para el español.
+const ENTITIES: Record<string, string> = {
+    nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'",
+    aacute: "á", eacute: "é", iacute: "í", oacute: "ó", uacute: "ú", uuml: "ü",
+    Aacute: "Á", Eacute: "É", Iacute: "Í", Oacute: "Ó", Uacute: "Ú", Uuml: "Ü",
+    ntilde: "ñ", Ntilde: "Ñ", iexcl: "¡", iquest: "¿", deg: "°", ordm: "º", ordf: "ª",
+};
 
 /** HTML de Moodle a texto plano: alcanza para que el modelo lo lea, no es un parser. */
 export function htmlToText(html: string | undefined): string {

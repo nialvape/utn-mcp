@@ -13,6 +13,27 @@ Este es el Model Context Protocol server NO OFICIAL de la UTN. Con él podés pe
 
 El agente recorre el aula como lo harías vos: entra al curso, mira los foros y abre los archivos que hagan falta.
 
+## Conectores de autogestión (opcionales)
+
+Los conectores de autogestión son paquetes aparte y opcionales. El core no incluye ni descarga Sysacad: el aula virtual funciona sin ningún conector.
+
+El conector de Tucumán está en `packages/sysacad-frt`. Si querés usarlo desde un checkout del repo, corré:
+
+```sh
+npm ci
+npm run build
+npm install --prefix packages/sysacad-frt --no-save --package-lock=false --ignore-scripts .
+npm run build --prefix packages/sysacad-frt
+npm install --no-save --package-lock=false --ignore-scripts --legacy-peer-deps ./packages/sysacad-frt
+export UTN_MCP_CONNECTORS=utn-mcp-sysacad-frt
+node build/index.js login autogestion
+node build/index.js
+```
+
+Tenés que correrlo desde ese checkout para que se resuelvan las dependencias instaladas ahí. El conector cubre solo el Sysacad clásico (ASP) de Tucumán (FRT), no sysacad2 ni otras regionales. Un conector futuro implementa el mismo contrato `AutogestionSystem` de `utn-mcp/autogestion`, con su propio id de sistema y su lista de regionales, sin tocar el core.
+
+`UTN_MCP_CONNECTORS` es una lista, separada por comas, de los nombres de los paquetes instalados en los que confiás. Cargar un conector ejecuta su código, así que configurá solo paquetes que conozcas y en los que confíes. Nada se instala automáticamente. Se rechazan los reclamos duplicados de un mismo sistema o de una misma regional. Las credenciales y las sesiones quedan por sistema y en tu computadora. La autogestión por HTTP todavía no está soportada.
+
 ## Tools
 | Tool | Qué hace |
 |---|---|
@@ -29,6 +50,10 @@ El agente recorre el aula como lo harías vos: entra al curso, mira los foros y 
 | `aula_choice_answer` | Responde una elección o te anota en un grupo. |
 | `aula_send_message` | Manda un mensaje privado a un docente o compañero. |
 | `aula_calendar_add_event` | Agrega un recordatorio a tu calendario del aula. |
+| `autogestion_cursando_ahora` | Las materias que estás cursando ahora según la autogestión, con comisión, aula y horarios cuando el sistema los publica. Incluye electivas. Requiere `utn-mcp login autogestion`. Aparece solo en modo local y si tu regional tiene un conector instalado. |
+| `autogestion_estado_academico` | Tu estado académico según la autogestión de tu regional: cada materia con su estado, plan, nota y fecha. Requiere `utn-mcp login autogestion`. Aparece solo en modo local y si tu regional tiene un conector instalado. |
+| `autogestion_correlatividades` | Las correlatividades de tu carrera según la autogestión, para cursar y para rendir, en vez de datos fijos del repo. Requiere `utn-mcp login autogestion`. Aparece solo en modo local y si tu regional tiene un conector instalado. |
+| `autogestion_examenes` | Tu historial de finales según la autogestión: fecha, materia, nota o estado, plan y código. Requiere `utn-mcp login autogestion`. Aparece solo en modo local y si tu regional tiene un conector instalado. |
 
 Al abrir una tarea, `aula_open` muestra si la entregaste, cuándo vence y la devolución con la nota. Las tools que escriben le piden al agente que te muestre lo que va a hacer y espere tu confirmación.
 

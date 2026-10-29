@@ -1,0 +1,12 @@
+{
+  "name": "utn-mcp-sysacad-frt",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "build/index.js",
+  "exports": "./build/index.js",
+  "files": ["build"],
+  "scripts": { "build": "tsc" },
+  "peerDependencies": { "utn-mcp": ">=0.9.0" },
+  "engines": { "node": ">=20" },
+  "license": "ISC"
+}
