@@ -23,7 +23,7 @@ const RELEASES = "https://github.com/nialvape/utn-mcp/releases/download";
 /** Las mismas regionales que `ASP_REGIONALS` del paquete; las que quedaron afuera dicen por qué ahí. */
 const SYSACAD_ASP_REGIONALS = [
     "frbb", "frch", "frcon", "frd", "frgp", "frh", "frlr", "frmdp", "frn",
-    "frp", "frrq", "frsf", "frsfco", "frsn", "frsr", "frtdf", "frvt",
+    "frp", "frrq", "frsf", "frsfco", "frsn", "frsr", "frt", "frtdf", "frvt",
 ] as const;
 
 export const CATALOG: CatalogEntry[] = [
@@ -33,12 +33,10 @@ export const CATALOG: CatalogEntry[] = [
         package: "utn-mcp-sysacad-asp",
         version: "0.1.0",
         tarball: `${RELEASES}/sysacad-asp-v0.1.0/utn-mcp-sysacad-asp-0.1.0.tgz`,
-        integrity: "sha512-gNfgmBAq2rwLeMVxzYAqeQ2saUfdVgvm27T5ygTMEAIoeQY+CPbaVHKtfN8YGirwgMD6Zgowf7FiD5QLuDrZuQ==",
-        regionales: {
-            // Verificado con cuenta real de FRT (oct 2026); el resto es el mismo producto sin probar.
-            frt: "verified",
-            ...Object.fromEntries(SYSACAD_ASP_REGIONALS.map((id) => [id, "candidate" as const])),
-        },
+        integrity: "sha512-dFiMVUwQJdLHmrKD6BZnUgn5EU73pzAzSBEEQyCA4P2eXOI6QeTRLnmGW//K1hmFJXl74Ax10VQrpVweY6+1Gw==",
+        // FRT anduvo con cuenta real (oct 2026) con la versión anterior, que posteaba directo a `menuAlumno.asp`;
+        // esta lee el formulario y todavía no entró nadie con ella.
+        regionales: Object.fromEntries(SYSACAD_ASP_REGIONALS.map((id) => [id, "candidate" as const])),
     },
 ];
 
