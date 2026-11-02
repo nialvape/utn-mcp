@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "build",
+    "declaration": false,
+    // Solo tipos del core, de sus declaraciones compiladas: en tiempo de ejecución el core le pasa lo que necesita en `create`.
+    "paths": { "utn-mcp/autogestion": ["../../build/autogestion/client/connector.d.ts"] }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "build"]
+}
