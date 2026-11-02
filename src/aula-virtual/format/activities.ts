@@ -4,6 +4,10 @@ import {
     getChoiceOptions,
     getChoicegroupOptions,
     getChoices,
+    getQuizAttempts,
+    getQuizBestGrade,
+    getQuizFeedback,
+    getQuizzes,
     getSubmissionStatus,
 } from "../client/client.js";
 import type { AulaSession } from "../client/session.js";
@@ -84,6 +88,48 @@ function pluginContent(plugins: AssignPlugin[] = []) {
     return {
         archivos: files.length ? files.map(toFile) : undefined,
         texto: texts.length ? texts.join("\n\n") : undefined,
+    };
+}
+
+const QUIZ_STATE_LABELS: Record<string, string> = {
+    inprogress: "en curso",
+    overdue: "vencido sin enviar",
+    finished: "finalizado",
+    abandoned: "abandonado",
+};
+
+/** Una nota con los decimales del cuestionario y coma decimal, como la muestra el aula ("0,00"). */
+const formatGrade = (grade: number, decimals: number) => grade.toFixed(decimals).replace(".", ",");
+
+/** Los intentos del usuario y la nota final del cuestionario, en su escala ("0,00 / 10,00"). */
+export async function viewQuiz(session: AulaSession, courseId: number, module: CourseModule) {
+    const [quizzes, attempts, best] = await Promise.all([
+        getQuizzes(session, courseId),
+        getQuizAttempts(session, module.instance),
+        getQuizBestGrade(session, module.instance),
+    ]);
+    const quiz = quizzes.find((q) => q.coursemodule === module.id);
+    const decimals = quiz?.decimalpoints ?? 2;
+    const outOf = (grade: number) =>
+        quiz ? `${formatGrade(grade, decimals)} / ${formatGrade(quiz.grade, decimals)}` : formatGrade(grade, decimals);
+    // El intento suma sobre el puntaje de las preguntas; la nota se lleva a la escala del cuestionario.
+    const attemptGrade = (sumgrades: number | null) =>
+        sumgrades === null || !quiz?.sumgrades ? undefined : outOf((sumgrades / quiz.sumgrades) * quiz.grade);
+    const feedback =
+        quiz?.hasfeedback && best !== null ? htmlToText(await getQuizFeedback(session, quiz.id, best)) : "";
+
+    return {
+        calificacionFinal: best !== null ? outOf(best) : undefined,
+        devolucion: feedback || undefined,
+        intentosPermitidos: quiz ? quiz.attempts || "ilimitados" : undefined,
+        limiteTiempoMinutos: quiz?.timelimit ? Math.round(quiz.timelimit / 60) : undefined,
+        intentos: attempts.map((a) => ({
+            numero: a.attempt,
+            estado: QUIZ_STATE_LABELS[a.state] ?? a.state,
+            comienzo: isoDate(a.timestart),
+            fin: isoDate(a.timefinish) || undefined,
+            calificacion: attemptGrade(a.sumgrades),
+        })),
     };
 }
 
