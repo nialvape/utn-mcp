@@ -10,6 +10,9 @@ import type {
     CourseSection,
     ForumDiscussion,
     ForumPost,
+    GradeItem,
+    Quiz,
+    QuizAttempt,
     SiteInfo,
 } from "./types.js";
 
@@ -218,6 +221,60 @@ export async function removeSubmission(session: AulaSession, assignid: number): 
         assignid,
     });
     throwOnWarnings(warnings, "Moodle no quitó la entrega.");
+}
+
+// --- Cuestionarios ---
+
+export async function getQuizzes(session: AulaSession, courseId: number): Promise<Quiz[]> {
+    const { quizzes } = await callWs<{ quizzes: Quiz[] }>(session, "mod_quiz_get_quizzes_by_courses", {
+        "courseids[0]": courseId,
+    });
+    return quizzes;
+}
+
+/** Los intentos del usuario, terminados o no, sin las vistas previas. */
+export async function getQuizAttempts(session: AulaSession, quizid: number): Promise<QuizAttempt[]> {
+    const { attempts } = await callWs<{ attempts: QuizAttempt[] }>(session, "mod_quiz_get_user_attempts", {
+        quizid,
+        status: "all",
+        includepreviews: 0,
+    });
+    return attempts;
+}
+
+/** La nota final del cuestionario, ya en su escala (`Quiz.grade`); null si todavía no hay o está oculta. */
+export async function getQuizBestGrade(session: AulaSession, quizid: number): Promise<number | null> {
+    const { hasgrade, grade } = await callWs<{ hasgrade: boolean; grade?: number | null }>(
+        session,
+        "mod_quiz_get_user_best_grade",
+        { quizid },
+    );
+    return hasgrade ? (grade ?? null) : null;
+}
+
+/** El comentario general que el docente configuró para el rango de esa nota. */
+export async function getQuizFeedback(session: AulaSession, quizid: number, grade: number): Promise<string> {
+    const { feedbacktext } = await callWs<{ feedbacktext: string }>(session, "mod_quiz_get_quiz_feedback_for_grade", {
+        quizid,
+        grade,
+    });
+    return feedbacktext;
+}
+
+// --- Calificaciones ---
+
+/**
+ * El libro de calificaciones del usuario en un curso, como lo ve en "Calificaciones". Trae también
+ * las notas que el docente carga a mano, que no están en ningún módulo.
+ */
+export async function getCourseGradeItems(session: AulaSession, courseid: number): Promise<GradeItem[]> {
+    const { userid } = await getSiteInfo(session);
+    const { usergrades } = await callWs<{ usergrades: { gradeitems: GradeItem[] }[] }>(
+        session,
+        "gradereport_user_get_grade_items",
+        { courseid, userid },
+    );
+    return usergrades[0]?.gradeitems ?? [];
 }
 
 // --- Elecciones (choice) y selección de grupos (choicegroup) ---

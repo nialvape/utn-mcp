@@ -19,6 +19,7 @@ El agente recorre el aula como lo harías vos: entra al curso, mira los foros y 
 | `aula_list_courses` | Lista tus cursos. Es el punto de partida. |
 | `aula_open` | Entra a un curso, un módulo, un foro o una discusión. Cada respuesta trae las direcciones de lo que hay adentro y de un nivel más arriba, así el agente navega sin perderse. |
 | `aula_read_file` | Lee un archivo del aula, por partes cuando es largo. |
+| `aula_grades` | Tus calificaciones en un curso, incluidas las que el docente carga a mano. |
 | `aula_study_pack` | Une en un solo PDF con índice los apuntes que elijas de una materia (un 'machacado'), guardado en tu compu. Solo en modo local. |
 | `aula_get_site_info` | Datos de tu usuario y de tu regional en el aula virtual. |
 | `aula_forum_post` | Abre un hilo en un foro o responde en una discusión. |
@@ -30,7 +31,7 @@ El agente recorre el aula como lo harías vos: entra al curso, mira los foros y 
 | `aula_send_message` | Manda un mensaje privado a un docente o compañero. |
 | `aula_calendar_add_event` | Agrega un recordatorio a tu calendario del aula. |
 
-Al abrir una tarea, `aula_open` muestra si la entregaste, cuándo vence y la devolución con la nota. Las tools que escriben le piden al agente que te muestre lo que va a hacer y espere tu confirmación.
+Al abrir una tarea, `aula_open` muestra si la entregaste, cuándo vence y la devolución con la nota. Al abrir un cuestionario, muestra tus intentos y la nota final. Las tools que escriben le piden al agente que te muestre lo que va a hacer y espere tu confirmación.
 
 ### Archivos que puede leer
 - **PDF**: el texto, página por página. Los **escaneados** se mandan como imagen de cada página, y el agente los lee igual.

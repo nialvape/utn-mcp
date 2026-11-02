@@ -156,3 +156,42 @@ export interface ChoiceOption {
     checked?: boolean;
     disabled?: boolean;
 }
+
+export interface Quiz {
+    id: number;
+    coursemodule: number;
+    /** Nota máxima del cuestionario: a esta escala se lleva el puntaje de los intentos. */
+    grade: number;
+    /** Puntaje máximo sumando las preguntas; un intento suma sobre esta escala. */
+    sumgrades: number;
+    decimalpoints: number;
+    /** 0: intentos ilimitados. */
+    attempts: number;
+    /** En segundos; 0 es sin límite. */
+    timelimit: number;
+    hasfeedback: number;
+}
+
+export interface QuizAttempt {
+    attempt: number;
+    state: "inprogress" | "overdue" | "finished" | "abandoned" | string;
+    timestart: number;
+    timefinish: number;
+    /** Puntaje crudo; null si todavía no está corregido o las opciones de revisión lo ocultan. */
+    sumgrades: number | null;
+}
+
+export interface GradeItem {
+    itemname: string | null;
+    /** "mod", "manual", "category" o "course" (el total del curso). */
+    itemtype: string;
+    itemmodule: string | null;
+    cmid?: number;
+    graderaw: number | null;
+    /** Ya formateada por Moodle con la configuración del curso ("4,00", "-" si no hay nota). */
+    gradeformatted: string;
+    grademax: number;
+    percentageformatted?: string;
+    gradeishidden: boolean;
+    feedback?: string;
+}
