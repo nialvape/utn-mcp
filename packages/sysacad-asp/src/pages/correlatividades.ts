@@ -1,15 +1,14 @@
-import { HttpError } from "utn-mcp/autogestion";
-import type { CorrelatividadMateria } from "utn-mcp/autogestion";
+import type { ConnectorKit, CorrelatividadMateria } from "utn-mcp/autogestion";
 import { columnIndex, tableWithHeaders } from "./parse-table.js";
 
 /** La tabla de correlatividades de una página: encabezado con materia y correlatividad. */
-export function parseCorrelatividadesPagina(html: string, pagina: string): CorrelatividadMateria[] {
-    const table = tableWithHeaders(html, ["materia", "correlatividad"]);
+export function parseCorrelatividadesPagina(kit: ConnectorKit, html: string, pagina: string): CorrelatividadMateria[] {
+    const table = tableWithHeaders(kit, html, ["materia", "correlatividad"]);
     if (!table) {
-        throw new HttpError(
+        throw new kit.HttpError(
             `La página de correlatividades para ${pagina} de Sysacad no trajo la tabla esperada ` +
                 "(materia/correlatividad): puede haber cambiado el layout. " +
-                "El parser está en src/autogestion/client/sysacad-asp/correlatividades.ts.",
+                "El parser está en packages/sysacad-asp/src/pages/correlatividades.ts.",
         );
     }
     const materia = columnIndex(table, "materia");

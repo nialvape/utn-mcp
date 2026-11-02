@@ -26,7 +26,7 @@ export async function createServer(aula: AulaSession, files: FileSource): Promis
             const regional = await aula.getRegional();
             const systems = await loadInstalledSystems();
             const system = systemForRegional(regional.id, systems);
-            if (system) registerAutogestionTools(server, new LocalAutogestionSession(system));
+            if (system) registerAutogestionTools(server, new LocalAutogestionSession(system, regional.id));
         } catch (e) {
             logger.warn((e as Error).message);
         }

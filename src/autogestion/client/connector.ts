@@ -1,10 +1,11 @@
+import { HttpError } from "../../shared/http.js";
+import { htmlToText } from "../../shared/html.js";
 import type { Correlatividades, EstadoMateria, ExamenMateria, NotasParcialesMateria } from "./types.js";
 
 /**
- * Un sistema de autogestión académica de una regional (Sysacad, SIU Guaraní, etc.).
- * Cada sistema es un conector que implementa esta interfaz; los conectores vienen de paquetes
- * instalados que exportan un `AutogestionSystem` y se declaran en `UTN_MCP_CONNECTORS`: cada
- * regional enchufa su propio parser.
+ * Un sistema de autogestión académica (Sysacad, SIU Guaraní, etc.) logueado con un usuario.
+ * Cada sistema es un paquete aparte que exporta un `AutogestionSystem`; el core lo instala desde su
+ * catálogo y le pide un conector para la regional del usuario.
  */
 export interface AutogestionConnector {
     /** Id del sistema, tal como lo declara el paquete que lo provee. */
@@ -44,31 +45,36 @@ export class InvalidCredentialsError extends Error {
 export class UnsupportedRegionalError extends Error {
     constructor(regionalId: string) {
         super(
-            `La regional ${regionalId.toUpperCase()} no tiene un conector de autogestión instalado y configurado. ` +
-                "Instalá el conector de tu regional y agregá su paquete a UTN_MCP_CONNECTORS. " +
+            `La regional ${regionalId.toUpperCase()} todavía no tiene un conector de autogestión. ` +
                 "El aula virtual se puede seguir usando sin autogestión.",
         );
         this.name = "UnsupportedRegionalError";
     }
 }
 
-/** Qué se sabe del conector: `verified` = alguien entró con una cuenta real; `unverified` = falta esa prueba. */
-export type SystemSupport = "verified" | "unverified";
+/**
+ * Lo que el core le presta al conector en `create`. El paquete importa del core solo tipos: instalado
+ * en otra carpeta, un import en tiempo de ejecución cargaría otra copia de `utn-mcp`, con otras clases
+ * de error que el core no reconoce.
+ */
+export const connectorKit = { HttpError, LoginRequiredError, InvalidCredentialsError, htmlToText };
 
-/** Lo que exporta un paquete de conector: qué regionales atiende y cómo crear el conector. */
+export type ConnectorKit = typeof connectorKit;
+
+/** Lo que exporta un paquete de conector: qué regionales atiende y cómo crear el conector de cada una. */
 export interface AutogestionSystem {
     id: string;
     name: string;
-    support: SystemSupport;
+    /** Ids de regional como en `regionals.ts` del aula (`frt`, `frd`...). */
     regionales: string[];
-    create(): AutogestionConnector;
+    /** Ayuda para el usuario de esa regional, si no es el legajo tal cual: "Legajo sin el 23-". */
+    usernameHint?(regionalId: string): string | undefined;
+    create(regionalId: string, kit: ConnectorKit): AutogestionConnector;
 }
 
-/** El sistema de una regional entre los conectores instalados, o null si ninguno la cubre. */
+/** El sistema de una regional entre los conectores cargados, o null si ninguno la cubre. */
 export function systemForRegional(regionalId: string, systems: AutogestionSystem[]): AutogestionSystem | null {
     return systems.find((system) => system.regionales.includes(regionalId)) ?? null;
 }
 
-export { HttpError } from "../../shared/http.js";
-export { htmlToText } from "../../shared/html.js";
 export type { CorrelatividadMateria, Correlatividades, EstadoMateria, ExamenMateria, NotasParcialesMateria } from "./types.js";

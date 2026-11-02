@@ -1,12 +1,12 @@
 {
-  "name": "utn-mcp-sysacad-frt",
+  "name": "utn-mcp-sysacad-asp",
   "version": "0.1.0",
+  "description": "Conector de utn-mcp para el Sysacad clásico (ASP) de las regionales de la UTN.",
   "type": "module",
   "main": "build/index.js",
   "exports": "./build/index.js",
   "files": ["build"],
   "scripts": { "build": "tsc" },
-  "peerDependencies": { "utn-mcp": ">=0.9.0" },
   "engines": { "node": ">=20" },
   "license": "ISC"
 }

@@ -1,5 +1,4 @@
-import { HttpError } from "utn-mcp/autogestion";
-import type { NotasParcialesMateria } from "utn-mcp/autogestion";
+import type { ConnectorKit, NotasParcialesMateria } from "utn-mcp/autogestion";
 import { columnIndex, tableWithHeaders } from "./parse-table.js";
 
 export function normalizarMateria(nombre: string): string {
@@ -11,12 +10,12 @@ export function normalizarMateria(nombre: string): string {
         .trim();
 }
 
-export function parseNotasParciales(html: string): NotasParcialesMateria[] {
-    const table = tableWithHeaders(html, ["materia", "horarios"]);
+export function parseNotasParciales(kit: ConnectorKit, html: string): NotasParcialesMateria[] {
+    const table = tableWithHeaders(kit, html, ["materia", "horarios"]);
     if (!table) {
-        throw new HttpError(
+        throw new kit.HttpError(
             "La página de notas de parciales de Sysacad no trajo la tabla esperada (materia/horarios): " +
-                "puede haber cambiado el layout. El parser está en src/autogestion/client/sysacad-asp/notas-parciales.ts.",
+                "puede haber cambiado el layout. El parser está en packages/sysacad-asp/src/pages/notas-parciales.ts.",
         );
     }
     const col = (k: string) => columnIndex(table, k);

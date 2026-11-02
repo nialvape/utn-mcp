@@ -1,4 +1,4 @@
-import { htmlToText } from "utn-mcp/autogestion";
+import type { ConnectorKit } from "utn-mcp/autogestion";
 
 /**
  * Parser tolerante de las tablas de SysacadWEB: HTML 4.01 a puro <table>/<td>, sin clases
@@ -16,13 +16,13 @@ export interface ParsedTable {
 }
 
 /** Todas las tablas de la página, como filas de celdas de texto. */
-export function parseTables(html: string): ParsedTable[] {
+export function parseTables(kit: ConnectorKit, html: string): ParsedTable[] {
     const tables: ParsedTable[] = [];
     for (const tableMatch of html.matchAll(/<table[\s>][\s\S]*?<\/table>/gi)) {
         const rows: string[][] = [];
         for (const rowMatch of tableMatch[0].matchAll(/<tr[\s>][\s\S]*?<\/tr>/gi)) {
             const cells = [...rowMatch[0].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)].map((c) =>
-                htmlToText(c[1]),
+                kit.htmlToText(c[1]),
             );
             if (cells.length > 0) rows.push(cells);
         }
@@ -37,9 +37,9 @@ export function parseTables(html: string): ParsedTable[] {
 }
 
 /** La tabla cuyos encabezados contienen todas las palabras clave (ej. "materia" y "estado"). */
-export function tableWithHeaders(html: string, keywords: string[]): ParsedTable | null {
+export function tableWithHeaders(kit: ConnectorKit, html: string, keywords: string[]): ParsedTable | null {
     const wanted = keywords.map((k) => k.toLowerCase());
-    for (const table of parseTables(html)) {
+    for (const table of parseTables(kit, html)) {
         const headers = table.headers.join(" ").toLowerCase();
         if (wanted.every((w) => headers.includes(w))) return table;
     }

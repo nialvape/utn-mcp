@@ -1,13 +1,12 @@
-import { HttpError } from "utn-mcp/autogestion";
-import type { ExamenMateria } from "utn-mcp/autogestion";
+import type { ConnectorKit, ExamenMateria } from "utn-mcp/autogestion";
 import { columnIndex, tableWithHeaders } from "./parse-table.js";
 
-export function parseExamenes(html: string): ExamenMateria[] {
-    const table = tableWithHeaders(html, ["materia", "nota", "fecha"]);
+export function parseExamenes(kit: ConnectorKit, html: string): ExamenMateria[] {
+    const table = tableWithHeaders(kit, html, ["materia", "nota", "fecha"]);
     if (!table) {
-        throw new HttpError(
+        throw new kit.HttpError(
             "La página de exámenes de Sysacad no trajo la tabla esperada (fecha/materia/nota): " +
-                "puede haber cambiado el layout. El parser está en src/autogestion/client/sysacad-asp/examenes.ts.",
+                "puede haber cambiado el layout. El parser está en packages/sysacad-asp/src/pages/examenes.ts.",
         );
     }
     const col = (k: string) => columnIndex(table, k);
