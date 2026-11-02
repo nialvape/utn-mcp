@@ -13,27 +13,6 @@ Este es el Model Context Protocol server NO OFICIAL de la UTN. Con él podés pe
 
 El agente recorre el aula como lo harías vos: entra al curso, mira los foros y abre los archivos que hagan falta.
 
-## Conectores de autogestión (opcionales)
-
-Los conectores de autogestión son paquetes aparte y opcionales. El core no incluye ni descarga Sysacad: el aula virtual funciona sin ningún conector.
-
-El conector de Tucumán está en `packages/sysacad-frt`. Si querés usarlo desde un checkout del repo, corré:
-
-```sh
-npm ci
-npm run build
-npm install --prefix packages/sysacad-frt --no-save --package-lock=false --ignore-scripts .
-npm run build --prefix packages/sysacad-frt
-npm install --no-save --package-lock=false --ignore-scripts --legacy-peer-deps ./packages/sysacad-frt
-export UTN_MCP_CONNECTORS=utn-mcp-sysacad-frt
-node build/index.js login autogestion
-node build/index.js
-```
-
-Tenés que correrlo desde ese checkout para que se resuelvan las dependencias instaladas ahí. El conector cubre solo el Sysacad clásico (ASP) de Tucumán (FRT), no sysacad2 ni otras regionales. Un conector futuro implementa el mismo contrato `AutogestionSystem` de `utn-mcp/autogestion`, con su propio id de sistema y su lista de regionales, sin tocar el core.
-
-`UTN_MCP_CONNECTORS` es una lista, separada por comas, de los nombres de los paquetes instalados en los que confiás. Cargar un conector ejecuta su código, así que configurá solo paquetes que conozcas y en los que confíes. Nada se instala automáticamente. Se rechazan los reclamos duplicados de un mismo sistema o de una misma regional. Las credenciales y las sesiones quedan por sistema y en tu computadora. La autogestión por HTTP todavía no está soportada.
-
 ## Tools
 | Tool | Qué hace |
 |---|---|
@@ -159,6 +138,15 @@ Aparece como una opción más al iniciar sesión.
 
 `UTN_REGIONAL` (por ejemplo, `UTN_REGIONAL=frt`) elige la que viene marcada por defecto, y es la que se usa si en lugar de `login` definís `UTN_USER` y `UTN_PASS`.
 
+### Autogestión (Sysacad)
+Si tu regional usa el Sysacad clásico, al terminar `login` te pregunta si querés conectarlo también. Si decís que sí, baja el conector de Sysacad (no viene con el paquete: si no lo usás, no se baja), te pide tu legajo y tu contraseña de Sysacad, que no siempre son las del aula, los prueba y los guarda en el gestor de credenciales. Para conectarlo después, o cambiar la contraseña:
+```bash
+npx -y utn-mcp login autogestion
+```
+Con Sysacad conectado aparecen las tools `autogestion_*`: tu estado académico, lo que estás cursando, tus finales y las correlatividades de tu carrera. Por ahora son solo de lectura y funcionan solo con el servidor instalado en tu computadora.
+
+Está probado en Tucumán (FRT). Bahía Blanca, Chubut, Concordia, Delta, General Pacheco, Haedo, La Rioja, Mar del Plata, Neuquén, Paraná, Reconquista, Santa Fe, San Francisco, San Nicolás, San Rafael, Tierra del Fuego y Venado Tuerto usan el mismo Sysacad, así que casi seguro anda: si lo probás, contanos en un [issue](https://github.com/nialvape/utn-mcp/issues) si funcionó. En algunas el usuario no es el legajo tal cual (en Delta va sin el "23-", por ejemplo); el login te dice qué escribir. Avellaneda y Rosario quedan afuera porque su Sysacad pide un captcha o un desafío del navegador, y Rafaela, Santa Cruz y Trenque Lauquen porque no tienen HTTPS válido y la contraseña viajaría expuesta.
+
 ### Modo HTTP (opcional)
 Necesita Node 22.13 o más nuevo. Primero, una vez:
 ```bash
@@ -204,9 +192,10 @@ Guardá esa `UTN_MCP_KEY`: sin ella no se pueden descifrar las sesiones guardada
 Instalado en tu computadora, todo queda ahí:
 - **Usuario y contraseña**: en el gestor de credenciales del sistema (Windows Credential Manager, Keychain en macOS, Secret Service en Linux).
 - **Token del aula virtual**: en `%APPDATA%\utn-mcp\session.json` (Windows) o `~/.config/utn-mcp/session.json` (Linux y macOS).
+- **Conector de autogestión**: en `connectors/`, dentro de esa misma carpeta. El legajo y la contraseña de Sysacad van al gestor de credenciales, aparte de los del aula.
 - **En modo HTTP**: la contraseña no se guarda; la sesión va cifrada en `utn-mcp.db`, en la misma carpeta, con la clave de `store.key` (o la de `UTN_MCP_KEY`). Del token del cliente solo se guarda el hash.
 
-En Linux sin gestor de credenciales (servidores, Docker, WSL) podés definir las variables de entorno `UTN_USER` y `UTN_PASS` en lugar de usar `login`.
+En Linux sin gestor de credenciales (servidores, Docker, WSL) podés definir las variables de entorno `UTN_USER` y `UTN_PASS` en lugar de usar `login`. Para Sysacad son `SYSACAD_ASP_USER` y `SYSACAD_ASP_PASS`.
 
 Si usás un servidor hosteado por otra persona, tu sesión del aula la guarda ese servidor (cifrada, y sin tu contraseña): revisá su política de privacidad.
 
@@ -221,6 +210,17 @@ npm run build   # compila a build/
 ```
 
 pdf.js no es una dependencia del paquete publicado. Está como `devDependency`, y `npm install` corre el script `prepare`, que copia a `vendor/pdfjs/` solo los archivos que usa el servidor (~4 MB). Así, quien instala `utn-mcp` no baja pdf.js entero ni su canvas nativo opcional (~37 MB). Si instalaste con `--ignore-scripts`, generalo a mano con `npm run prepare`.
+
+### Conectores de autogestión
+Cada sistema de autogestión es un paquete aparte en `packages/` (hoy, `packages/sysacad-asp`). No se publica en npm: `utn-mcp login` baja el `.tgz` adjunto a un release del repo, comprueba que su hash sea el de `src/autogestion/client/catalog.ts` y lo extrae en `connectors/`. El conector implementa `AutogestionSystem` de `src/autogestion/client/connector.ts` y del core importa solo tipos: lo que necesita en tiempo de ejecución (las clases de error, `htmlToText`) se lo pasa el core en `create`.
+
+Para publicar una versión de un conector:
+```bash
+node scripts/pack-connector.mjs sysacad-asp
+```
+Arma el `.tgz` en `build-connectors/` y muestra la URL y el hash que van al catálogo, y el `gh release create` que lo sube.
+
+Para probar un conector sin publicarlo, compilalo, instalalo con `npm install` en la carpeta desde la que corrés `utn-mcp` y nombralo en `UTN_MCP_CONNECTORS` (separados por comas). Cargar un conector ejecuta su código: nombrá solo paquetes en los que confíes.
 
 ## Aviso
 Este proyecto no está afiliado ni avalado por la UTN. Usalo bajo tu responsabilidad.
