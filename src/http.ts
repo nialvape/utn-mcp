@@ -12,6 +12,8 @@ import {
     type OAuthTokenVerifier,
 } from "@modelcontextprotocol/server";
 import { hostHeaderValidation, originValidation, toNodeHandler } from "@modelcontextprotocol/node";
+import type { StoredAutogestion } from "./autogestion/client/stored-session.js";
+import { mountAutogestionLink } from "./autogestion/link-page.js";
 import type { AccessPolicy } from "./oauth/access.js";
 import { mountAdmin } from "./oauth/admin.js";
 import type { RedirectAllowlist } from "./oauth/redirects.js";
@@ -72,8 +74,17 @@ export interface HttpOptions {
     adminSecret?: string;
 }
 
-/** El factory recibe en `ctx.authInfo` el token ya validado, con el usuario; de ahí arma su sesión. */
-export function startHttpServer(factory: McpServerFactory, options: HttpOptions, store: SessionStore, inbox: UploadInbox) {
+/**
+ * El factory recibe en `ctx.authInfo` el token ya validado, con el usuario; de ahí arma su sesión.
+ * `autogestion` sirve la página donde cada usuario entra a la autogestión de su regional.
+ */
+export function startHttpServer(
+    factory: McpServerFactory,
+    options: HttpOptions,
+    store: SessionStore,
+    inbox: UploadInbox,
+    autogestion: StoredAutogestion,
+) {
     const { host, port, publicUrl, access, redirects, adminSecret } = options;
     const handler = createMcpHandler(factory, { onerror: (e) => logger.error(e.message) });
     const verifier = storeVerifier(store);
@@ -131,6 +142,7 @@ export function startHttpServer(factory: McpServerFactory, options: HttpOptions,
         res.type("html").send(page(upload.title, uploadForm(upload.limits)));
     });
     app.post("/subir/:id", sameOrigin, (req, res) => receiveUpload(inbox, req, res));
+    mountAutogestionLink(app, autogestion, sameOrigin);
 
     app.listen(port, host, () => {
         logger.info(`Servidor MCP escuchando en http://${host}:${port}/mcp`);

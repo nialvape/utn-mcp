@@ -20,6 +20,16 @@ export interface AutogestionConnector {
     notasParciales?(): Promise<NotasParcialesMateria[]>;
     /** Historial de exámenes finales, si el sistema lo publica; no todos los conectores lo tienen. */
     examenes?(): Promise<ExamenMateria[]>;
+    /**
+     * La sesión del sistema sin la contraseña (cookies, ids de sesión), para guardarla cifrada y retomarla
+     * en otro request. Sin esto, el conector sirve solo en local: el modo HTTP no guarda contraseñas.
+     */
+    exportSession?(): string;
+    /**
+     * Retoma una sesión de `exportSession`. Sin la contraseña no puede volver a entrar solo: si la sesión
+     * venció, las llamadas rechazan con `LoginRequiredError`.
+     */
+    restoreSession?(data: string): void;
 }
 
 /** Credenciales de un sistema de autogestión. En Sysacad `username` es el legajo. */

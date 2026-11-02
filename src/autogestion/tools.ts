@@ -15,6 +15,11 @@ const failure = (e: unknown) => ({
     isError: true,
 });
 
+/** Igual para todas: el login es distinto en local (CLI) y en HTTP (link), así que lo explica el error. */
+const LOGIN_NOTE =
+    " Si todavía no entró a su autogestión, el error dice cómo hacerlo; seguilo. Las credenciales son las del " +
+    "sistema de autogestión, que no siempre son las del aula virtual.";
+
 export function registerAutogestionTools(server: McpServer, session: AutogestionSession) {
     server.registerTool(
         "autogestion_estado_academico",
@@ -24,9 +29,7 @@ export function registerAutogestionTools(server: McpServer, session: Autogestion
                 "del plan con su estado (regular, aprobada, libre), plan, nota y fecha. No es el catálogo " +
                 "completo de la carrera: puede incluir electivas aprobadas y no listar materias sin " +
                 "movimientos cargados. Las que se están cursando se marcan como Cursando cuando el " +
-                "sistema permite saberlas. Requiere " +
-                "`utn-mcp login autogestion` una vez; las credenciales son las del sistema de autogestión, " +
-                "que no siempre son las del aula virtual.",
+                "sistema permite saberlas." + LOGIN_NOTE,
             annotations: { readOnlyHint: true, openWorldHint: false },
         },
         async () => {
@@ -44,7 +47,7 @@ export function registerAutogestionTools(server: McpServer, session: Autogestion
             description:
                 "Materias que el usuario está cursando ahora según la autogestión de su regional, con su " +
                 "comisión, aula y horarios cuando el sistema los publica. Incluye electivas, a diferencia " +
-                "del estado académico. Requiere `utn-mcp login autogestion` una vez.",
+                "del estado académico." + LOGIN_NOTE,
             annotations: { readOnlyHint: true, openWorldHint: false },
         },
         async () => {
@@ -63,7 +66,7 @@ export function registerAutogestionTools(server: McpServer, session: Autogestion
                 "Historial de exámenes finales del usuario según la autogestión de su regional: fecha, " +
                 "materia, nota o estado del examen cuando todavía no hay nota, plan y código. Puede cubrir " +
                 "también materias rendidas en planes anteriores y electivas que el estado académico no " +
-                "muestra. Requiere `utn-mcp login autogestion` una vez.",
+                "muestra." + LOGIN_NOTE,
             annotations: { readOnlyHint: true, openWorldHint: false },
         },
         async () => {
@@ -82,8 +85,7 @@ export function registerAutogestionTools(server: McpServer, session: Autogestion
                 "Correlatividades de la carrera del usuario según la autogestión de su regional, separadas " +
                 "para cursar y para rendir cuando el sistema las distingue: para cada materia, qué exige " +
                 "tener regular o aprobada. Es la fuente dinámica de " +
-                "correlatividades: usala en lugar de suponer datos de un plan fijo. Requiere " +
-                "`utn-mcp login autogestion` una vez.",
+                "correlatividades: usala en lugar de suponer datos de un plan fijo." + LOGIN_NOTE,
             annotations: { readOnlyHint: true, openWorldHint: false },
         },
         async () => {
