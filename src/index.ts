@@ -8,6 +8,11 @@ import { LocalSession } from "./aula-virtual/client/local-session.js";
 import { defaultRegional } from "./aula-virtual/client/regionals.js";
 import { StoredAulaSession } from "./aula-virtual/client/stored-session.js";
 import { runLogin } from "./aula-virtual/login.js";
+import type { AutogestionSystem } from "./autogestion/client/connector.js";
+import { installCatalog } from "./autogestion/client/install.js";
+import { loadInstalledSystems } from "./autogestion/client/installed-systems.js";
+import { LocalAutogestionSession } from "./autogestion/client/local-session.js";
+import { StoredAutogestion } from "./autogestion/client/stored-session.js";
 import { offerAutogestionLogin, runAutogestionLogin } from "./autogestion/login.js";
 import { startHttpServer, userIdOf } from "./http.js";
 import { accessPolicyFromEnv } from "./oauth/access.js";
@@ -50,7 +55,7 @@ async function main() {
             await runAutogestionLogin((await new LocalSession().getRegional()).id);
         } else {
             await runLogin(values.http);
-            // La autogestión todavía es solo del modo local: en HTTP no hay dónde pedirle la clave a cada usuario.
+            // En HTTP cada usuario entra a su autogestión desde el link que le pasa el agente.
             if (!values.http) await offerAutogestionLogin((await new LocalSession().getRegional()).id);
         }
         return;
@@ -66,10 +71,13 @@ async function main() {
         const loginUrl = process.env.UTN_MCP_LOGIN_URL || `${baseUrl}/login`;
         const store = await SqliteStore.open();
         const inbox = new UploadInbox(baseUrl);
+        // Atiende a usuarios de cualquier regional: se instalan todos los conectores del catálogo.
+        await installCatalog();
+        const autogestion = new StoredAutogestion(baseUrl, store, await loadSystems());
         const factory = (ctx: { authInfo?: AuthInfo }) => {
             const userId = userIdOf(ctx.authInfo);
             const aula = new StoredAulaSession(store, userId, loginUrl);
-            return createServer(aula, { local: false, inbox, owner: String(userId) });
+            return createServer(aula, { local: false, inbox, owner: String(userId) }, autogestion.forUser(userId));
         };
         const options = {
             host: values.host,
@@ -79,12 +87,26 @@ async function main() {
             redirects: redirectAllowlistFromEnv(),
             adminSecret: process.env.UTN_MCP_ADMIN_SECRET || undefined,
         };
-        startHttpServer(factory, options, store, inbox);
+        startHttpServer(factory, options, store, inbox, autogestion);
     } else {
         // STDIO: un solo usuario, el de la compu, con la misma sesión para todas las conexiones.
         const aula = new LocalSession();
-        serveStdio(() => createServer(aula, { local: true }), { onerror: (e) => logger.error(e.message) });
+        const autogestion = {
+            systems: await loadSystems(),
+            sessionFor: (system: AutogestionSystem, regionalId: string) => new LocalAutogestionSession(system, regionalId),
+        };
+        serveStdio(() => createServer(aula, { local: true }, autogestion), { onerror: (e) => logger.error(e.message) });
         logger.info("Servidor MCP iniciado en STDIO");
+    }
+}
+
+/** Los conectores de autogestión instalados. Uno roto no puede dejar sin aula virtual: si falla, se sigue sin ellos. */
+async function loadSystems(): Promise<AutogestionSystem[]> {
+    try {
+        return await loadInstalledSystems();
+    } catch (e) {
+        logger.warn((e as Error).message);
+        return [];
     }
 }
 

@@ -29,10 +29,10 @@ El agente recorre el aula como lo harías vos: entra al curso, mira los foros y 
 | `aula_choice_answer` | Responde una elección o te anota en un grupo. |
 | `aula_send_message` | Manda un mensaje privado a un docente o compañero. |
 | `aula_calendar_add_event` | Agrega un recordatorio a tu calendario del aula. |
-| `autogestion_cursando_ahora` | Las materias que estás cursando ahora según la autogestión, con comisión, aula y horarios cuando el sistema los publica. Incluye electivas. Requiere `utn-mcp login autogestion`. Aparece solo en modo local y si tu regional tiene un conector instalado. |
-| `autogestion_estado_academico` | Tu estado académico según la autogestión de tu regional: cada materia con su estado, plan, nota y fecha. Requiere `utn-mcp login autogestion`. Aparece solo en modo local y si tu regional tiene un conector instalado. |
-| `autogestion_correlatividades` | Las correlatividades de tu carrera según la autogestión, para cursar y para rendir, en vez de datos fijos del repo. Requiere `utn-mcp login autogestion`. Aparece solo en modo local y si tu regional tiene un conector instalado. |
-| `autogestion_examenes` | Tu historial de finales según la autogestión: fecha, materia, nota o estado, plan y código. Requiere `utn-mcp login autogestion`. Aparece solo en modo local y si tu regional tiene un conector instalado. |
+| `autogestion_cursando_ahora` | Las materias que estás cursando ahora según la autogestión, con comisión, aula y horarios cuando el sistema los publica. Incluye electivas. Aparece solo si tu regional tiene un conector de autogestión. |
+| `autogestion_estado_academico` | Tu estado académico según la autogestión de tu regional: cada materia con su estado, plan, nota y fecha. Aparece solo si tu regional tiene un conector de autogestión. |
+| `autogestion_correlatividades` | Las correlatividades de tu carrera según la autogestión, para cursar y para rendir, en vez de datos fijos del repo. Aparece solo si tu regional tiene un conector de autogestión. |
+| `autogestion_examenes` | Tu historial de finales según la autogestión: fecha, materia, nota o estado, plan y código. Aparece solo si tu regional tiene un conector de autogestión. |
 
 Al abrir una tarea, `aula_open` muestra si la entregaste, cuándo vence y la devolución con la nota. Las tools que escriben le piden al agente que te muestre lo que va a hacer y espere tu confirmación.
 
@@ -143,7 +143,7 @@ Si tu regional usa el Sysacad clásico, al terminar `login` te pregunta si quer�
 ```bash
 npx -y utn-mcp login autogestion
 ```
-Con Sysacad conectado aparecen las tools `autogestion_*`: tu estado académico, lo que estás cursando, tus finales y las correlatividades de tu carrera. Por ahora son solo de lectura y funcionan solo con el servidor instalado en tu computadora.
+Con Sysacad conectado aparecen las tools `autogestion_*`: tu estado académico, lo que estás cursando, tus finales y las correlatividades de tu carrera. Por ahora son solo de lectura.
 
 Lo usan Bahía Blanca, Chubut, Concordia, Delta, General Pacheco, Haedo, La Rioja, Mar del Plata, Neuquén, Paraná, Reconquista, Santa Fe, San Francisco, San Nicolás, San Rafael, Tucumán, Tierra del Fuego y Venado Tuerto. En Tucumán anduvo con una versión anterior del conector; esta todavía no se probó con una cuenta real: si lo probás, contanos en un [issue](https://github.com/nialvape/utn-mcp/issues) si funcionó. En algunas el usuario no es el legajo tal cual (en Delta va sin el "23-", por ejemplo); el login te dice qué escribir. Avellaneda y Rosario quedan afuera porque su Sysacad pide un captcha o un desafío del navegador, y Rafaela, Santa Cruz y Trenque Lauquen porque no tienen HTTPS válido y la contraseña viajaría expuesta.
 
@@ -162,6 +162,8 @@ En este modo el servidor no lee archivos de tu disco: para entregar, el agente p
 
 ### Hostearlo para otros
 En modo HTTP el servidor también es servidor de autorización OAuth: un cliente MCP (Claude, ChatGPT) que se conecta a `https://tu-dominio/mcp` recibe un 401, descubre el OAuth y abre una página donde el alumno elige su regional y entra con su usuario de la UTN. Cada alumno usa el aula de su regional, aunque sean de regionales distintas. Ese login vincula su aula: la contraseña se usa una sola vez para sacar el token de Moodle y **no se guarda**. Cuando la sesión del aula vence, el agente le pasa el link de `/login` para renovarla, sin reconectar el cliente.
+
+La autogestión (Sysacad) funciona igual para cada alumno, según su regional. Al arrancar, el servidor instala los conectores del catálogo en `connectors/` de su carpeta de datos. La primera vez que el agente la necesita, le pasa al alumno un link a `/autogestion/...` para que entre con su legajo y contraseña de Sysacad desde el navegador: la contraseña nunca pasa por el chat. Como con el aula, la contraseña se usa una sola vez y **no se guarda**: queda cifrada en la base solo la sesión de Sysacad. Cuando Sysacad la vence (unos minutos sin usarla), el agente le vuelve a pasar el link.
 
 Quién puede entrar lo decidís vos: con `UTN_MCP_ALLOWED_EMAILS` (una lista), o con `UTN_MCP_ACCESS_URL`, que apunta a un servicio tuyo. El servidor le hace `POST` con `{ "email", "usuario", "regional" }` y el header `Authorization: Bearer <UTN_MCP_ACCESS_SECRET>`, y espera `{ "permitido": true }` o `{ "permitido": false, "motivo": "...", "url": "..." }`. Se consulta al conectar y en cada renovación del token (cada hora), así que una baja se aplica sola.
 
@@ -193,11 +195,11 @@ Instalado en tu computadora, todo queda ahí:
 - **Usuario y contraseña**: en el gestor de credenciales del sistema (Windows Credential Manager, Keychain en macOS, Secret Service en Linux).
 - **Token del aula virtual**: en `%APPDATA%\utn-mcp\session.json` (Windows) o `~/.config/utn-mcp/session.json` (Linux y macOS).
 - **Conector de autogestión**: en `connectors/`, dentro de esa misma carpeta. El legajo y la contraseña de Sysacad van al gestor de credenciales, aparte de los del aula.
-- **En modo HTTP**: la contraseña no se guarda; la sesión va cifrada en `utn-mcp.db`, en la misma carpeta, con la clave de `store.key` (o la de `UTN_MCP_KEY`). Del token del cliente solo se guarda el hash.
+- **En modo HTTP**: la contraseña no se guarda; la sesión va cifrada en `utn-mcp.db`, en la misma carpeta, con la clave de `store.key` (o la de `UTN_MCP_KEY`). Del token del cliente solo se guarda el hash. Con la de Sysacad pasa lo mismo: no se guarda, y su sesión va cifrada en la misma base.
 
 En Linux sin gestor de credenciales (servidores, Docker, WSL) podés definir las variables de entorno `UTN_USER` y `UTN_PASS` en lugar de usar `login`. Para Sysacad son `SYSACAD_ASP_USER` y `SYSACAD_ASP_PASS`.
 
-Si usás un servidor hosteado por otra persona, tu sesión del aula la guarda ese servidor (cifrada, y sin tu contraseña): revisá su política de privacidad.
+Si usás un servidor hosteado por otra persona, tus sesiones del aula y de Sysacad las guarda ese servidor (cifradas, y sin tus contraseñas): revisá su política de privacidad.
 
 ## Desarrollo
 ```bash

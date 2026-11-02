@@ -3,8 +3,9 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { HttpError } from "../../shared/http.js";
+import { logger } from "../../shared/logger.js";
 import { configDir } from "../../shared/paths.js";
-import type { CatalogEntry } from "./catalog.js";
+import { CATALOG, type CatalogEntry } from "./catalog.js";
 
 /** Donde quedan los conectores instalados, uno por carpeta con el nombre de su paquete. */
 export const connectorsDir = () => join(configDir(), "connectors");
@@ -17,6 +18,22 @@ export async function installedManifest(entry: CatalogEntry): Promise<{ version?
         return JSON.parse(await readFile(join(connectorDir(entry), "package.json"), "utf8"));
     } catch {
         return null;
+    }
+}
+
+/**
+ * Para el modo HTTP, que atiende usuarios de cualquier regional: instala los conectores del catálogo que
+ * falten o hayan quedado viejos. Uno que no se puede bajar no frena el servidor: queda sin esas tools.
+ */
+export async function installCatalog(): Promise<void> {
+    for (const entry of CATALOG) {
+        if ((await installedManifest(entry))?.version === entry.version) continue;
+        try {
+            await installConnector(entry);
+            logger.info(`Conector de ${entry.name} ${entry.version} instalado.`);
+        } catch (e) {
+            logger.warn(`No se pudo instalar el conector de ${entry.name}: ${(e as Error).message}`);
+        }
     }
 }
 

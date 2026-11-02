@@ -1,6 +1,6 @@
 {
   "name": "utn-mcp-sysacad-asp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Conector de utn-mcp para el Sysacad clásico (ASP) de las regionales de la UTN.",
   "type": "module",
   "main": "build/index.js",
