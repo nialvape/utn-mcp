@@ -1,9 +1,10 @@
 import { randomBytes } from "node:crypto";
 
 /**
- * Valores que viven en memoria hasta que se usan o vencen: los pedidos de `/authorize` mientras el
- * usuario completa el login y los codes hasta que el cliente los canjea. Si el servidor se reinicia,
- * se pierden y el cliente vuelve a empezar el OAuth, que es lo que haría igual con un code vencido.
+ * Valores que viven en memoria hasta que se usan o vencen, con un id aleatorio que sirve de secreto: los
+ * pedidos de `/authorize` mientras el usuario completa el login, los codes del OAuth hasta que el cliente
+ * los canjea o los links para entrar a la autogestión. Si el servidor se reinicia, se pierden y hay que
+ * volver a empezar, que es lo que pasaría igual con uno vencido.
  */
 export class Expiring<T> {
     private readonly items = new Map<string, { value: T; expiresAt: number }>();

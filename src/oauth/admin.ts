@@ -6,7 +6,7 @@ import { InvalidCredentialsError, MfaError, type MfaPrompt } from "../aula-virtu
 import { AULA_PLATFORM } from "../aula-virtual/client/stored-session.js";
 import { logger } from "../shared/logger.js";
 import type { SessionStore, StoredUser } from "../shared/store/session-store.js";
-import { Expiring, RateLimiter } from "./expiring.js";
+import { Expiring, RateLimiter } from "../shared/expiring.js";
 import { PendingLogin } from "./pending-login.js";
 
 /** Intentos de `/admin/verificar` por cuenta del aula cada 15 minutos: que no sirva para probar contraseñas. */

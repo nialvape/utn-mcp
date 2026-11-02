@@ -13,7 +13,7 @@ import { logger } from "../shared/logger.js";
 import { escapeHtml, page } from "../shared/pages.js";
 import type { SessionStore } from "../shared/store/session-store.js";
 import type { AccessPolicy } from "./access.js";
-import { Expiring, RateLimiter } from "./expiring.js";
+import { Expiring, RateLimiter } from "../shared/expiring.js";
 import { PendingLogin } from "./pending-login.js";
 import { describeRedirect, redirectTrust, type RedirectAllowlist } from "./redirects.js";
 
