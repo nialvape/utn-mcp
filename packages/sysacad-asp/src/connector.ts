@@ -41,6 +41,13 @@ interface Page {
     html: string;
 }
 
+/** Lo que guarda `exportSession`: todo menos la contraseña. */
+interface StoredSession {
+    cookies: [string, string][];
+    sessionId: string | null;
+    menu: Page;
+}
+
 /**
  * Conector del SysacadWEB clásico (ASP), el mismo producto en casi todas las regionales. Las páginas
  * detrás del login no son públicas: en vez de adivinar sus nombres, se siguen los enlaces del menú
@@ -99,6 +106,22 @@ export class SysacadAspConnector implements AutogestionConnector {
         this.credentials = credentials;
         this.sessionId = SESSION_ID_PATTERN.exec(page.html)?.[1] ?? null;
         this.menu = page;
+    }
+
+    /** Cookies, id y menú: de él salen los enlaces a las páginas internas, así que no hace falta volver a pedirlo. */
+    exportSession(): string {
+        if (!this.menu) throw new this.kit.LoginRequiredError(SYSTEM_NAME);
+        const data: StoredSession = { cookies: [...this.cookies], sessionId: this.sessionId, menu: this.menu };
+        return JSON.stringify(data);
+    }
+
+    restoreSession(raw: string): void {
+        const data = JSON.parse(raw) as StoredSession;
+        this.credentials = null;
+        this.cookies.clear();
+        for (const [name, value] of data.cookies) this.cookies.set(name, value);
+        this.sessionId = data.sessionId;
+        this.menu = data.menu;
     }
 
     async estadoAcademico(): Promise<EstadoMateria[]> {
