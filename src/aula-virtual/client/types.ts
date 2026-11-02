@@ -187,7 +187,6 @@ export interface GradeItem {
     itemtype: string;
     itemmodule: string | null;
     cmid?: number;
-    graderaw: number | null;
     /** Ya formateada por Moodle con la configuración del curso ("4,00", "-" si no hay nota). */
     gradeformatted: string;
     grademax: number;
