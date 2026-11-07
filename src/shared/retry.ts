@@ -37,15 +37,19 @@ export async function withRetry<T>(operation: () => Promise<T>, policy: RetryPol
         signal,
         onRetry = logRetry,
     } = policy;
+    const maxAttempts = Math.max(1, Math.floor(attempts) || 1);
     const deadline = Date.now() + totalTimeoutMs;
     let lastError: unknown;
-    for (let attempt = 1; attempt <= attempts; attempt++) {
-        if (lastError !== undefined && signal?.aborted) break;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        if (signal?.aborted) {
+            if (lastError !== undefined) break;
+            throw new Error("cancelado");
+        }
         try {
             return await operation();
         } catch (error) {
             lastError = error;
-            if (attempt === attempts || !isTransient(error)) throw error;
+            if (attempt === maxAttempts || !isTransient(error)) throw error;
             let delayMs = backoffDelayMs(attempt, baseDelayMs, maxDelayMs);
             const retryAfter = error instanceof HttpError ? error.retryAfterMs : undefined;
             if (retryAfter !== undefined) delayMs = Math.max(delayMs, retryAfter);
@@ -86,6 +90,10 @@ function backoffDelayMs(attempt: number, baseDelayMs: number, maxDelayMs: number
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+            reject(new Error("cancelado"));
+            return;
+        }
         const onAbort = () => {
             clearTimeout(timer);
             reject(new Error("cancelado"));
