@@ -257,12 +257,20 @@ export class SysacadAspConnector implements AutogestionConnector {
         return page.html;
     }
 
-    private async fetchBinary(href: string): Promise<CertificadoDescargado> {
+    private async fetchBinary(href: string, followedDownload = false): Promise<CertificadoDescargado> {
         const page = await this.requestRaw(this.sessionUrl(href), undefined, MAX_CERTIFICADO_BYTES);
-        if (/^text\/html/i.test(page.contentType) && findLoginForm(decode(page.contentType, page.buffer), page.url)) {
+        if (!/^text\/html/i.test(page.contentType)) {
+            return { contentType: page.contentType, bytes: new Uint8Array(page.buffer) };
+        }
+        const html = decode(page.contentType, page.buffer);
+        if (findLoginForm(html, page.url)) {
             this.menu = null;
             this.sessionId = null;
             throw new this.kit.LoginRequiredError(SYSTEM_NAME);
+        }
+        if (!followedDownload) {
+            const download = findDownloadLink(html);
+            if (download) return this.fetchBinary(download, true);
         }
         return { contentType: page.contentType, bytes: new Uint8Array(page.buffer) };
     }
@@ -371,6 +379,16 @@ export class SysacadAspConnector implements AutogestionConnector {
 function decode(contentType: string, buffer: ArrayBuffer): string {
     const utf8 = /charset=utf-?8/i.test(contentType);
     return new TextDecoder(utf8 ? "utf-8" : "iso-8859-1").decode(buffer);
+}
+
+/** href del enlace de descarga directa (atributo `download`) de una página de certificado, si lo tiene. */
+function findDownloadLink(html: string): string | null {
+    for (const m of html.matchAll(/<a\s[^>]*>/gi)) {
+        if (!/\bdownload\s*=/i.test(m[0])) continue;
+        const href = /href\s*=\s*"?([^"'\s>]+)"?/i.exec(m[0])?.[1];
+        if (href) return href;
+    }
+    return null;
 }
 
 /** href del primer enlace del menú cuyo texto visible matchea. */
