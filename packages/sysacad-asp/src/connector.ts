@@ -38,6 +38,8 @@ const LOGIN_ERROR_PATTERN = /class\s*=\s*["']?textoError/i;
  */
 const SESSION_ID_PATTERN = /[?&]id=(\d+-\d+)/;
 
+const MAX_CERTIFICADO_BYTES = 20 * 1024 * 1024;
+
 interface Page {
     url: string;
     html: string;
@@ -261,6 +263,11 @@ export class SysacadAspConnector implements AutogestionConnector {
             this.menu = null;
             this.sessionId = null;
             throw new this.kit.LoginRequiredError(SYSTEM_NAME);
+        }
+        if (page.buffer.byteLength > MAX_CERTIFICADO_BYTES) {
+            throw new this.kit.HttpError(
+                `El certificado pesa más de ${MAX_CERTIFICADO_BYTES / 1024 / 1024} MB: no se descargó. Bajalo directo de Sysacad.`,
+            );
         }
         return { contentType: page.contentType, bytes: new Uint8Array(page.buffer) };
     }
