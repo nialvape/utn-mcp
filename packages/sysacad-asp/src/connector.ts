@@ -258,16 +258,11 @@ export class SysacadAspConnector implements AutogestionConnector {
     }
 
     private async fetchBinary(href: string): Promise<CertificadoDescargado> {
-        const page = await this.requestRaw(this.sessionUrl(href));
+        const page = await this.requestRaw(this.sessionUrl(href), undefined, MAX_CERTIFICADO_BYTES);
         if (/^text\/html/i.test(page.contentType) && findLoginForm(decode(page.contentType, page.buffer), page.url)) {
             this.menu = null;
             this.sessionId = null;
             throw new this.kit.LoginRequiredError(SYSTEM_NAME);
-        }
-        if (page.buffer.byteLength > MAX_CERTIFICADO_BYTES) {
-            throw new this.kit.HttpError(
-                `El certificado pesa más de ${MAX_CERTIFICADO_BYTES / 1024 / 1024} MB: no se descargó. Bajalo directo de Sysacad.`,
-            );
         }
         return { contentType: page.contentType, bytes: new Uint8Array(page.buffer) };
     }
@@ -289,7 +284,7 @@ export class SysacadAspConnector implements AutogestionConnector {
         return { url: raw.url, html: decode(raw.contentType, raw.buffer) };
     }
 
-    private async requestRaw(url: URL, body?: URLSearchParams): Promise<{ url: string; contentType: string; buffer: ArrayBuffer }> {
+    private async requestRaw(url: URL, body?: URLSearchParams, maxBytes?: number): Promise<{ url: string; contentType: string; buffer: ArrayBuffer }> {
         let current = url;
         let method = body ? "POST" : "GET";
         for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
@@ -327,9 +322,44 @@ export class SysacadAspConnector implements AutogestionConnector {
                     retryAfterMs: this.kit.retryAfterMs(res.headers.get("retry-after")),
                 });
             }
-            return { url: current.href, contentType: res.headers.get("content-type") ?? "", buffer: await res.arrayBuffer() };
+            const buffer = maxBytes ? await this.readCapped(res, maxBytes, current.pathname) : await res.arrayBuffer();
+            return { url: current.href, contentType: res.headers.get("content-type") ?? "", buffer };
         }
         throw new this.kit.HttpError(`Demasiadas redirecciones desde ${url.pathname}.`);
+    }
+
+    private async readCapped(res: Response, maxBytes: number, pathname: string): Promise<ArrayBuffer> {
+        const tooBig = () =>
+            new this.kit.HttpError(
+                `El archivo de ${pathname} pesa más de ${maxBytes / 1024 / 1024} MB: no se descargó. Bajalo directo de Sysacad.`,
+            );
+        const declared = Number(res.headers.get("content-length"));
+        if (declared > maxBytes) throw tooBig();
+        if (!res.body) {
+            const buffer = await res.arrayBuffer();
+            if (buffer.byteLength > maxBytes) throw tooBig();
+            return buffer;
+        }
+        const reader = res.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            total += value.byteLength;
+            if (total > maxBytes) {
+                await reader.cancel();
+                throw tooBig();
+            }
+            chunks.push(value);
+        }
+        const out = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) {
+            out.set(chunk, offset);
+            offset += chunk.byteLength;
+        }
+        return out.buffer;
     }
 
     private cookieHeader(): string {
