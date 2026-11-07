@@ -1,5 +1,6 @@
-import { HttpError } from "../../shared/http.js";
+import { HttpError, retryAfterMs } from "../../shared/http.js";
 import { htmlToText } from "../../shared/html.js";
+import { isTransientError, withRetry, type RetryPolicy } from "../../shared/retry.js";
 import type { Correlatividades, EstadoMateria, ExamenMateria, NotasParcialesMateria } from "./types.js";
 
 /**
@@ -63,11 +64,34 @@ export class UnsupportedRegionalError extends Error {
 }
 
 /**
+ * Reintentos con backoff para las lecturas del conector (`withRetry` de `shared/retry.ts`), con dos
+ * exclusiones propias de la autogestión: las credenciales inválidas y la sesión vencida no se
+ * reintentan: la recuperación de sesión ya la hace el conector y, en HTTP, la capa de sesión
+ * guardada. Optativo por operación y solo para lecturas idempotentes: el login no lo lleva.
+ */
+function autogestionWithRetry<T>(operation: () => Promise<T>, policy: RetryPolicy = {}): Promise<T> {
+    return withRetry(operation, {
+        isTransient: (error) =>
+            !(error instanceof LoginRequiredError || error instanceof InvalidCredentialsError) &&
+            isTransientError(error),
+        ...policy,
+    });
+}
+
+/**
  * Lo que el core le presta al conector en `create`. El paquete importa del core solo tipos: instalado
  * en otra carpeta, un import en tiempo de ejecución cargaría otra copia de `utn-mcp`, con otras clases
- * de error que el core no reconoce.
+ * de error que el core no reconoce. Por eso los reintentos también entran por acá (`withRetry`), como
+ * valor y no como import.
  */
-export const connectorKit = { HttpError, LoginRequiredError, InvalidCredentialsError, htmlToText };
+export const connectorKit = {
+    HttpError,
+    LoginRequiredError,
+    InvalidCredentialsError,
+    htmlToText,
+    retryAfterMs,
+    withRetry: autogestionWithRetry,
+};
 
 export type ConnectorKit = typeof connectorKit;
 
@@ -88,3 +112,4 @@ export function systemForRegional(regionalId: string, systems: AutogestionSystem
 }
 
 export type { CorrelatividadMateria, Correlatividades, EstadoMateria, ExamenMateria, NotasParcialesMateria } from "./types.js";
+export type { RetryEvent, RetryPolicy } from "../../shared/retry.js";
