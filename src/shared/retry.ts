@@ -70,6 +70,8 @@ export async function withRetry<T>(operation: () => Promise<T>, policy: RetryPol
     const deadline = Date.now() + totalTimeoutMs;
     let lastError: unknown;
     for (let attempt = 1; attempt <= attempts; attempt++) {
+        // Entre intentos se corta si cancelaron: sin esto, un abort justo al vencer la espera haría un intento de más.
+        if (lastError !== undefined && signal?.aborted) break;
         try {
             return await operation();
         } catch (error) {
