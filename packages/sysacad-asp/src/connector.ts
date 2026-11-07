@@ -251,7 +251,6 @@ export class SysacadAspConnector implements AutogestionConnector {
                     signal: AbortSignal.timeout(30_000),
                 });
             } catch (e) {
-                // Falla de red o timeout: se marca con `cause` para que la política de reintentos la vea transitoria.
                 throw new this.kit.HttpError(`No se pudo conectar con ${current.host}: ${(e as Error).message}`, undefined, {
                     cause: e,
                 });

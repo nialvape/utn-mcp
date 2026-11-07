@@ -1,5 +1,4 @@
 export class HttpError extends Error {
-    /** Espera que pidió el servidor con `Retry-After`, en milisegundos. */
     readonly retryAfterMs?: number;
 
     constructor(message: string, readonly status?: number, options?: { cause?: unknown; retryAfterMs?: number }) {
@@ -9,7 +8,6 @@ export class HttpError extends Error {
     }
 }
 
-/** Milisegundos que pide esperar un encabezado `Retry-After` (segundos o fecha HTTP), o undefined si no se entiende. */
 export function retryAfterMs(header: string | null): number | undefined {
     if (!header) return undefined;
     const seconds = Number(header);
