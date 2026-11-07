@@ -1,5 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/server";
+import { z } from "zod";
+import type { FileSource } from "../shared/uploads.js";
 import type { AutogestionSession } from "./client/session.js";
+import { descargarCertificado, getCertificados } from "./format/certificados.js";
 import { getCorrelatividades } from "./format/correlatividades.js";
 import { getEstadoAcademico } from "./format/estado-academico.js";
 import { getExamenes } from "./format/examenes.js";
@@ -20,7 +23,7 @@ const LOGIN_NOTE =
     " Si todavía no entró a su autogestión, el error dice cómo hacerlo; seguilo. Las credenciales son las del " +
     "sistema de autogestión, que no siempre son las del aula virtual.";
 
-export function registerAutogestionTools(server: McpServer, session: AutogestionSession) {
+export function registerAutogestionTools(server: McpServer, session: AutogestionSession, files: FileSource) {
     server.registerTool(
         "autogestion_estado_academico",
         {
@@ -77,6 +80,53 @@ export function registerAutogestionTools(server: McpServer, session: Autogestion
             }
         },
     );
+
+    server.registerTool(
+        "autogestion_certificados",
+        {
+            description:
+                "Certificados y constancias que la autogestión de la regional del usuario ofrece descargar " +
+                "(en Sysacad: el certificado de alumno regular y la actividad académica, con validación por " +
+                "código QR cuando la regional los habilita). Devuelve cada uno con su `nombre` y una " +
+                "`referencia` para pedir la descarga. Es solo lectura: no solicita ni inicia trámites; " +
+                "si el portal no ofrece un certificado online, acá no aparece." + LOGIN_NOTE,
+            annotations: { readOnlyHint: true, openWorldHint: false },
+        },
+        async () => {
+            try {
+                return json(await getCertificados(session));
+            } catch (e) {
+                return failure(e);
+            }
+        },
+    );
+
+    // La descarga se guarda en el disco: solo en STDIO, donde el servidor corre en la compu del usuario.
+    if (files.local) {
+        server.registerTool(
+            "autogestion_descargar_certificado",
+            {
+                description:
+                    "Descarga un certificado o constancia de la autogestión y lo guarda en la compu del " +
+                    "usuario. La `referencia` sale de autogestion_certificados; la respuesta trae `archivo` " +
+                    "con la ruta del archivo guardado (PDF cuando el sistema lo genera así). Es solo " +
+                    "lectura: baja un documento que el portal ya permite descargar, no inicia trámites." + LOGIN_NOTE,
+                inputSchema: z.object({
+                    referencia: z
+                        .string()
+                        .describe("La `referencia` del certificado, tal como la devuelve autogestion_certificados."),
+                }),
+                annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+            },
+            async ({ referencia }) => {
+                try {
+                    return json(await descargarCertificado(session, referencia));
+                } catch (e) {
+                    return failure(e);
+                }
+            },
+        );
+    }
 
     server.registerTool(
         "autogestion_correlatividades",

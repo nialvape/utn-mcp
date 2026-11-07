@@ -1,7 +1,14 @@
 import { HttpError, retryAfterMs } from "../../shared/http.js";
 import { htmlToText } from "../../shared/html.js";
 import { isTransientError, withRetry, type RetryPolicy } from "../../shared/retry.js";
-import type { Correlatividades, EstadoMateria, ExamenMateria, NotasParcialesMateria } from "./types.js";
+import type {
+    CertificadoAutogestion,
+    CertificadoDescargado,
+    Correlatividades,
+    EstadoMateria,
+    ExamenMateria,
+    NotasParcialesMateria,
+} from "./types.js";
 
 /**
  * Un sistema de autogestión académica (Sysacad, SIU Guaraní, etc.) logueado con un usuario.
@@ -21,6 +28,8 @@ export interface AutogestionConnector {
     notasParciales?(): Promise<NotasParcialesMateria[]>;
     /** Historial de exámenes finales, si el sistema lo publica; no todos los conectores lo tienen. */
     examenes?(): Promise<ExamenMateria[]>;
+    certificados?(): Promise<CertificadoAutogestion[]>;
+    descargarCertificado?(referencia: string): Promise<CertificadoDescargado>;
     /**
      * La sesión del sistema sin la contraseña (cookies, ids de sesión), para guardarla cifrada y retomarla
      * en otro request. Sin esto, el conector sirve solo en local: el modo HTTP no guarda contraseñas.
@@ -105,5 +114,13 @@ export function systemForRegional(regionalId: string, systems: AutogestionSystem
     return systems.find((system) => system.regionales.includes(regionalId)) ?? null;
 }
 
-export type { CorrelatividadMateria, Correlatividades, EstadoMateria, ExamenMateria, NotasParcialesMateria } from "./types.js";
+export type {
+    CertificadoAutogestion,
+    CertificadoDescargado,
+    CorrelatividadMateria,
+    Correlatividades,
+    EstadoMateria,
+    ExamenMateria,
+    NotasParcialesMateria,
+} from "./types.js";
 export type { RetryEvent, RetryPolicy } from "../../shared/retry.js";

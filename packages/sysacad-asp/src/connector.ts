@@ -1,6 +1,8 @@
 import type {
     AutogestionConnector,
     AutogestionCredentials,
+    CertificadoAutogestion,
+    CertificadoDescargado,
     ConnectorKit,
     Correlatividades,
     EstadoMateria,
@@ -170,6 +172,28 @@ export class SysacadAspConnector implements AutogestionConnector {
         return parseExamenes(this.kit, await this.fetchExamenes());
     }
 
+    async certificados(): Promise<CertificadoAutogestion[]> {
+        const html = await this.fetchLinkedPage(/descarga\s*de\s*certificados/i, "descarga de certificados");
+        const certificados: CertificadoAutogestion[] = [];
+        const visible = html.replace(/<!--[\s\S]*?-->/g, "");
+        for (const m of visible.matchAll(/<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi)) {
+            const nombre = this.kit.htmlToText(m[2]);
+            if (!nombre || /^\s*javascript:/i.test(m[1]) || /menuAlumno/i.test(m[1])) continue;
+            certificados.push({ nombre, referencia: m[1] });
+        }
+        return certificados;
+    }
+
+    async descargarCertificado(referencia: string, retry = true): Promise<CertificadoDescargado> {
+        try {
+            return await this.fetchBinary(referencia);
+        } catch (error) {
+            if (!(error instanceof this.kit.LoginRequiredError) || !retry || !this.credentials) throw error;
+            await this.login(this.credentials);
+            return this.descargarCertificado(referencia, false);
+        }
+    }
+
     private async fetchEstadoAcademico(): Promise<string> {
         return this.fetchLinkedPage(/estado\s*acad/i, "estado académico");
     }
@@ -222,14 +246,7 @@ export class SysacadAspConnector implements AutogestionConnector {
 
     /** GET de una página interna con la sesión; si volvió al login, la sesión venció. */
     private async fetchPage(href: string): Promise<string> {
-        if (!this.menu) throw new this.kit.LoginRequiredError(SYSTEM_NAME);
-        const url = new URL(href, this.menu.url);
-        if (url.origin !== new URL(this.menu.url).origin) {
-            // Un enlace interno legítimo no sale del host; no le mandamos la sesión a otro lado.
-            throw new this.kit.HttpError(`Sysacad devolvió un enlace fuera de ${new URL(this.menu.url).host}: no se sigue.`);
-        }
-        if (this.sessionId && !url.searchParams.get("id")) url.searchParams.set("id", this.sessionId);
-        const page = await this.request(url);
+        const page = await this.request(this.sessionUrl(href));
         if (findLoginForm(page.html, page.url)) {
             this.menu = null;
             this.sessionId = null;
@@ -238,8 +255,34 @@ export class SysacadAspConnector implements AutogestionConnector {
         return page.html;
     }
 
+    private async fetchBinary(href: string): Promise<CertificadoDescargado> {
+        const page = await this.requestRaw(this.sessionUrl(href));
+        if (/^text\/html/i.test(page.contentType) && findLoginForm(decode(page.contentType, page.buffer), page.url)) {
+            this.menu = null;
+            this.sessionId = null;
+            throw new this.kit.LoginRequiredError(SYSTEM_NAME);
+        }
+        return { contentType: page.contentType, bytes: new Uint8Array(page.buffer) };
+    }
+
+    private sessionUrl(href: string): URL {
+        if (!this.menu) throw new this.kit.LoginRequiredError(SYSTEM_NAME);
+        const url = new URL(href, this.menu.url);
+        if (url.origin !== new URL(this.menu.url).origin) {
+            // Un enlace interno legítimo no sale del host; no le mandamos la sesión a otro lado.
+            throw new this.kit.HttpError(`Sysacad devolvió un enlace fuera de ${new URL(this.menu.url).host}: no se sigue.`);
+        }
+        if (this.sessionId && !url.searchParams.get("id")) url.searchParams.set("id", this.sessionId);
+        return url;
+    }
+
     /** GET, o POST con `body`, siguiendo las redirecciones a mano para quedarse con cada cookie. */
     private async request(url: URL, body?: URLSearchParams): Promise<Page> {
+        const raw = await this.requestRaw(url, body);
+        return { url: raw.url, html: decode(raw.contentType, raw.buffer) };
+    }
+
+    private async requestRaw(url: URL, body?: URLSearchParams): Promise<{ url: string; contentType: string; buffer: ArrayBuffer }> {
         let current = url;
         let method = body ? "POST" : "GET";
         for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
@@ -277,7 +320,7 @@ export class SysacadAspConnector implements AutogestionConnector {
                     retryAfterMs: this.kit.retryAfterMs(res.headers.get("retry-after")),
                 });
             }
-            return { url: current.href, html: decode(res, await res.arrayBuffer()) };
+            return { url: current.href, contentType: res.headers.get("content-type") ?? "", buffer: await res.arrayBuffer() };
         }
         throw new this.kit.HttpError(`Demasiadas redirecciones desde ${url.pathname}.`);
     }
@@ -288,8 +331,8 @@ export class SysacadAspConnector implements AutogestionConnector {
 }
 
 /** SysacadWEB sirve HTML 4.01 en iso-8859-1; si alguna regional declara UTF-8, se respeta. */
-function decode(res: Response, buffer: ArrayBuffer): string {
-    const utf8 = /charset=utf-?8/i.test(res.headers.get("content-type") ?? "");
+function decode(contentType: string, buffer: ArrayBuffer): string {
+    const utf8 = /charset=utf-?8/i.test(contentType);
     return new TextDecoder(utf8 ? "utf-8" : "iso-8859-1").decode(buffer);
 }
 
