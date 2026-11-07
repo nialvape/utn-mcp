@@ -125,6 +125,22 @@ export class SysacadAspConnector implements AutogestionConnector {
     }
 
     async estadoAcademico(): Promise<EstadoMateria[]> {
+        return this.kit.withRetry(() => this.readEstadoAcademico(), { operation: "sysacad estadoAcademico" });
+    }
+
+    async correlatividades(): Promise<Correlatividades> {
+        return this.kit.withRetry(() => this.readCorrelatividades(), { operation: "sysacad correlatividades" });
+    }
+
+    async notasParciales(): Promise<NotasParcialesMateria[]> {
+        return this.kit.withRetry(() => this.readNotasParciales(), { operation: "sysacad notasParciales" });
+    }
+
+    async examenes(): Promise<ExamenMateria[]> {
+        return this.kit.withRetry(() => this.readExamenes(), { operation: "sysacad examenes" });
+    }
+
+    private async readEstadoAcademico(): Promise<EstadoMateria[]> {
         const materias = parseEstadoAcademico(this.kit, await this.fetchEstadoAcademico());
         const cursando = new Set(
             parseNotasParciales(this.kit, await this.fetchNotasParciales())
@@ -137,18 +153,18 @@ export class SysacadAspConnector implements AutogestionConnector {
         return materias;
     }
 
-    async correlatividades(): Promise<Correlatividades> {
+    private async readCorrelatividades(): Promise<Correlatividades> {
         return {
             cursar: parseCorrelatividadesPagina(this.kit, await this.fetchCorrelatividades(), "cursar"),
             rendir: parseCorrelatividadesPagina(this.kit, await this.fetchCorrelatividadesExamen(), "rendir"),
         };
     }
 
-    async notasParciales(): Promise<NotasParcialesMateria[]> {
+    private async readNotasParciales(): Promise<NotasParcialesMateria[]> {
         return parseNotasParciales(this.kit, await this.fetchNotasParciales());
     }
 
-    async examenes(): Promise<ExamenMateria[]> {
+    private async readExamenes(): Promise<ExamenMateria[]> {
         return parseExamenes(this.kit, await this.fetchExamenes());
     }
 
@@ -235,7 +251,10 @@ export class SysacadAspConnector implements AutogestionConnector {
                     signal: AbortSignal.timeout(30_000),
                 });
             } catch (e) {
-                throw new this.kit.HttpError(`No se pudo conectar con ${current.host}: ${(e as Error).message}`);
+                // Falla de red o timeout: se marca con `cause` para que la política de reintentos la vea transitoria.
+                throw new this.kit.HttpError(`No se pudo conectar con ${current.host}: ${(e as Error).message}`, undefined, {
+                    cause: e,
+                });
             }
             for (const cookie of res.headers.getSetCookie()) {
                 const [pair] = cookie.split(";");
@@ -252,7 +271,11 @@ export class SysacadAspConnector implements AutogestionConnector {
                 method = "GET";
                 continue;
             }
-            if (!res.ok) throw new this.kit.HttpError(`HTTP ${res.status} en ${current.pathname}`, res.status);
+            if (!res.ok) {
+                throw new this.kit.HttpError(`HTTP ${res.status} en ${current.pathname}`, res.status, {
+                    retryAfterMs: this.kit.retryAfterMs(res.headers.get("retry-after")),
+                });
+            }
             return { url: current.href, html: decode(res, await res.arrayBuffer()) };
         }
         throw new this.kit.HttpError(`Demasiadas redirecciones desde ${url.pathname}.`);
