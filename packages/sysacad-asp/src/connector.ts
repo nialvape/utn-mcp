@@ -75,6 +75,7 @@ export class SysacadAspConnector implements AutogestionConnector {
                     `${credentials.password.length}: Sysacad la cortaría sin avisar. Revisala con \`utn-mcp login autogestion\`.`,
             );
         }
+        this.credentials = null;
         this.cookies.clear();
         this.sessionId = null;
         this.menu = null;

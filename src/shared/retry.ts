@@ -37,7 +37,7 @@ export async function withRetry<T>(operation: () => Promise<T>, policy: RetryPol
         signal,
         onRetry = logRetry,
     } = policy;
-    const maxAttempts = Math.max(1, Math.floor(attempts) || 1);
+    const maxAttempts = Number.isFinite(attempts) ? Math.max(1, Math.floor(attempts)) : 1;
     const deadline = Date.now() + totalTimeoutMs;
     let lastError: unknown;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -53,7 +53,7 @@ export async function withRetry<T>(operation: () => Promise<T>, policy: RetryPol
             let delayMs = backoffDelayMs(attempt, baseDelayMs, maxDelayMs);
             const retryAfter = error instanceof HttpError ? error.retryAfterMs : undefined;
             if (retryAfter !== undefined) delayMs = Math.max(delayMs, retryAfter);
-            if (Date.now() + delayMs > deadline) throw error;
+            if (Date.now() + delayMs >= deadline) throw error;
             onRetry({
                 operation: name,
                 attempt,
