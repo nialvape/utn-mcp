@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { mergePdfs } from "../../shared/documents/merge.js";
 import { exportsDir } from "../../shared/paths.js";
+import { withRetry } from "../../shared/retry.js";
 import { getCourseFiles, getUserCourses, type CourseFileEntry } from "../client/client.js";
 import type { AulaSession } from "../client/session.js";
 import { parseAddress } from "./address.js";
@@ -128,7 +129,11 @@ export async function buildStudyPack(session: AulaSession, rawAddress: string, a
         }
         let bytes: Uint8Array;
         try {
-            bytes = (await fetchFile(session, downloadUrl(baseUrl, entry.file.fileurl), MAX_BYTES)).bytes;
+            bytes = (
+                await withRetry(() => fetchFile(session, downloadUrl(baseUrl, entry.file.fileurl), MAX_BYTES), {
+                    operation: "aula studyPack",
+                })
+            ).bytes;
         } catch (e) {
             omitted.push({ nombre: name, seccion: entry.section, motivo: (e as Error).message });
             continue;

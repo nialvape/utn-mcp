@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod";
+import { withRetry } from "../shared/retry.js";
 import type { FileSource } from "../shared/uploads.js";
 import { getSiteInfo } from "./client/client.js";
 import type { AulaSession } from "./client/session.js";
@@ -42,10 +43,10 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
         },
         async () => {
             try {
-                const [{ sitename, fullname, username, userid, release }, regional] = await Promise.all([
-                    getSiteInfo(session),
-                    session.getRegional(),
-                ]);
+                const [{ sitename, fullname, username, userid, release }, regional] = await withRetry(
+                    () => Promise.all([getSiteInfo(session), session.getRegional()]),
+                    { operation: "aula getSiteInfo" },
+                );
                 return json({ regional: regional.name, sitename, fullname, username, userid, release });
             } catch (e) {
                 return failure(e);
@@ -63,7 +64,7 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
         },
         async () => {
             try {
-                return json(await open(session, ROOT));
+                return json(await withRetry(() => open(session, ROOT), { operation: "aula listCourses" }));
             } catch (e) {
                 return failure(e);
             }
@@ -113,7 +114,9 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
         },
         async ({ direccion, pagina }) => {
             try {
-                return json(await open(session, direccion, pagina));
+                return json(
+                    await withRetry(() => open(session, direccion, pagina), { operation: "aula open" }),
+                );
             } catch (e) {
                 return failure(e);
             }
@@ -144,7 +147,9 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
         },
         async ({ url, desde }) => {
             try {
-                const { parts, ...fileRead } = await readAulaFile(session, url, desde);
+                const { parts, ...fileRead } = await withRetry(() => readAulaFile(session, url, desde), {
+                    operation: "aula readFile",
+                });
                 const label = (n: number, title?: string) =>
                     `--- ${fileRead.unidad} ${n} de ${fileRead.total}${title ? ` (${title})` : ""} ---`;
                 return {
@@ -189,7 +194,7 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
         },
         async ({ direccion }) => {
             try {
-                return json(await viewGrades(session, direccion));
+                return json(await withRetry(() => viewGrades(session, direccion), { operation: "aula grades" }));
             } catch (e) {
                 return failure(e);
             }
@@ -234,7 +239,11 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
             },
             async ({ direccion, archivos }) => {
                 try {
-                    return json(await buildStudyPack(session, direccion, archivos));
+                    return json(
+                        await withRetry(() => buildStudyPack(session, direccion, archivos), {
+                            operation: "aula studyPack",
+                        }),
+                    );
                 } catch (e) {
                     return failure(e);
                 }
@@ -442,7 +451,11 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
             },
             async ({ direccion }) => {
                 try {
-                    return json(await createUploadLink(session, direccion, inbox, owner));
+                    return json(
+                        await withRetry(() => createUploadLink(session, direccion, inbox, owner), {
+                            operation: "aula uploadLink",
+                        }),
+                    );
                 } catch (e) {
                     return failure(e);
                 }

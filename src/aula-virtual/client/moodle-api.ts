@@ -1,4 +1,4 @@
-import { postForm } from "../../shared/http.js";
+import { HttpError, postForm, retryAfterMs } from "../../shared/http.js";
 import type { AulaSession } from "./session.js";
 
 const WS_PATH = "/webservice/rest/server.php";
@@ -74,7 +74,7 @@ export async function fetchFile(
         try {
             res = await fetch(withToken, { signal: AbortSignal.timeout(60_000), redirect: "manual" });
         } catch (e) {
-            throw new MoodleError(`No se pudo bajar el archivo: ${(e as Error).message}`);
+            throw new HttpError(`No se pudo bajar el archivo: ${(e as Error).message}`, undefined, { cause: e });
         }
 
         if (res.status >= 300 && res.status < 400) {
@@ -105,9 +105,18 @@ export async function fetchFile(
                 token = await session.refreshToken();
                 continue;
             }
+            if (!res.ok) {
+                throw new HttpError(`HTTP ${res.status} al bajar el archivo`, res.status, {
+                    retryAfterMs: retryAfterMs(res.headers.get("retry-after")),
+                });
+            }
             throw new MoodleError(data.error ?? `HTTP ${res.status}`, data.errorcode);
         }
-        if (!res.ok || !res.body) throw new MoodleError(`HTTP ${res.status} al bajar el archivo`);
+        if (!res.ok || !res.body) {
+            throw new HttpError(`HTTP ${res.status} al bajar el archivo`, res.status, {
+                retryAfterMs: retryAfterMs(res.headers.get("retry-after")),
+            });
+        }
 
         return { bytes: await readWithLimit(res, maxBytes), contentType };
     }
