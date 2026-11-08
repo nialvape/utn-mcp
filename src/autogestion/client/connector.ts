@@ -1,5 +1,6 @@
-import { HttpError } from "../../shared/http.js";
+import { HttpError, retryAfterMs } from "../../shared/http.js";
 import { htmlToText } from "../../shared/html.js";
+import { isTransientError, withRetry, type RetryPolicy } from "../../shared/retry.js";
 import type { Correlatividades, EstadoMateria, ExamenMateria, NotasParcialesMateria } from "./types.js";
 
 /**
@@ -62,12 +63,29 @@ export class UnsupportedRegionalError extends Error {
     }
 }
 
+/** `withRetry` para conectores: credenciales rechazadas o sesión vencida no se reintentan, tienen su propio flujo. */
+function autogestionWithRetry<T>(operation: () => Promise<T>, policy: RetryPolicy = {}): Promise<T> {
+    return withRetry(operation, {
+        isTransient: (error) =>
+            !(error instanceof LoginRequiredError || error instanceof InvalidCredentialsError) &&
+            isTransientError(error),
+        ...policy,
+    });
+}
+
 /**
  * Lo que el core le presta al conector en `create`. El paquete importa del core solo tipos: instalado
  * en otra carpeta, un import en tiempo de ejecución cargaría otra copia de `utn-mcp`, con otras clases
  * de error que el core no reconoce.
  */
-export const connectorKit = { HttpError, LoginRequiredError, InvalidCredentialsError, htmlToText };
+export const connectorKit = {
+    HttpError,
+    LoginRequiredError,
+    InvalidCredentialsError,
+    htmlToText,
+    retryAfterMs,
+    withRetry: autogestionWithRetry,
+};
 
 export type ConnectorKit = typeof connectorKit;
 
@@ -88,3 +106,4 @@ export function systemForRegional(regionalId: string, systems: AutogestionSystem
 }
 
 export type { CorrelatividadMateria, Correlatividades, EstadoMateria, ExamenMateria, NotasParcialesMateria } from "./types.js";
+export type { RetryEvent, RetryPolicy } from "../../shared/retry.js";
