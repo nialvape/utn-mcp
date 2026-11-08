@@ -63,6 +63,7 @@ export class UnsupportedRegionalError extends Error {
     }
 }
 
+/** `withRetry` para conectores: credenciales rechazadas o sesión vencida no se reintentan, tienen su propio flujo. */
 function autogestionWithRetry<T>(operation: () => Promise<T>, policy: RetryPolicy = {}): Promise<T> {
     return withRetry(operation, {
         isTransient: (error) =>

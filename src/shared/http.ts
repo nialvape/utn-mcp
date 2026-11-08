@@ -8,6 +8,7 @@ export class HttpError extends Error {
     }
 }
 
+/** Encabezado `Retry-After` (segundos o fecha HTTP) en ms desde ahora; `undefined` si falta o no se entiende. */
 export function retryAfterMs(header: string | null): number | undefined {
     if (!header) return undefined;
     const seconds = Number(header);

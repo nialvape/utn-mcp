@@ -75,7 +75,6 @@ export class SysacadAspConnector implements AutogestionConnector {
                     `${credentials.password.length}: Sysacad la cortaría sin avisar. Revisala con \`utn-mcp login autogestion\`.`,
             );
         }
-        this.credentials = null;
         this.cookies.clear();
         this.sessionId = null;
         this.menu = null;
@@ -99,6 +98,8 @@ export class SysacadAspConnector implements AutogestionConnector {
         const withoutStyles = page.html.replace(/<style[\s\S]*?<\/style>/gi, "");
         // Un rechazo vuelve a mostrar el formulario, a veces con un `textoError` ("ERROR: ...") y a veces sin nada.
         if (findLoginForm(page.html, page.url) || LOGIN_ERROR_PATTERN.test(withoutStyles)) {
+            // Solo un rechazo invalida las credenciales guardadas: tras un timeout siguen sirviendo para el re-login.
+            this.credentials = null;
             throw new this.kit.InvalidCredentialsError(SYSTEM_NAME);
         }
         if (/VBScript runtime error/i.test(page.html)) {
