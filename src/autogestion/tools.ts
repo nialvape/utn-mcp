@@ -101,7 +101,6 @@ export function registerAutogestionTools(server: McpServer, session: Autogestion
         },
     );
 
-    // La descarga se guarda en el disco: solo en STDIO, donde el servidor corre en la compu del usuario.
     if (files.local) {
         server.registerTool(
             "autogestion_descargar_certificado",

@@ -387,7 +387,6 @@ function decode(contentType: string, buffer: ArrayBuffer): string {
     return new TextDecoder(utf8 ? "utf-8" : "iso-8859-1").decode(buffer);
 }
 
-/** href del enlace de descarga directa (atributo `download`) de una página de certificado, si lo tiene. */
 function findDownloadLink(html: string): string | null {
     for (const m of html.matchAll(/<a\s[^>]*>/gi)) {
         if (!/\bdownload\s*=/i.test(m[0])) continue;
