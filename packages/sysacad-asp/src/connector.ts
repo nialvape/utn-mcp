@@ -178,10 +178,10 @@ export class SysacadAspConnector implements AutogestionConnector {
         const html = await this.fetchLinkedPage(/descarga\s*de\s*certificados/i, "descarga de certificados");
         const certificados: CertificadoAutogestion[] = [];
         const visible = html.replace(/<!--[\s\S]*?-->/g, "");
-        for (const m of visible.matchAll(/<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi)) {
-            const nombre = this.kit.htmlToText(m[2]);
-            if (!nombre || /^\s*javascript:/i.test(m[1]) || /menuAlumno/i.test(m[1])) continue;
-            certificados.push({ nombre, referencia: m[1] });
+        for (const [, href, textoEnlace] of visible.matchAll(/<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi)) {
+            const nombre = this.kit.htmlToText(textoEnlace);
+            if (!nombre || /^\s*javascript:/i.test(href) || /menuAlumno/i.test(href)) continue;
+            certificados.push({ nombre, referencia: href });
         }
         return certificados;
     }
