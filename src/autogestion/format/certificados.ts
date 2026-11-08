@@ -18,7 +18,7 @@ export async function getCertificados(session: AutogestionSession): Promise<Cert
 const EXTENSIONS: Record<string, string> = { "application/pdf": ".pdf", "text/html": ".html" };
 
 const safeFileName = (name: string) =>
-    name.replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+    name.replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^[-.]+|[-.]+$/g, "").slice(0, 80) || "certificado";
 
 const PDF_MAGIC = [0x25, 0x50];
 
