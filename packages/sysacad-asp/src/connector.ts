@@ -175,6 +175,10 @@ export class SysacadAspConnector implements AutogestionConnector {
     }
 
     async certificados(): Promise<CertificadoAutogestion[]> {
+        return this.kit.withRetry(() => this.readCertificados(), { operation: "sysacad certificados" });
+    }
+
+    private async readCertificados(): Promise<CertificadoAutogestion[]> {
         const html = await this.fetchLinkedPage(/descarga\s*de\s*certificados/i, "descarga de certificados");
         const certificados: CertificadoAutogestion[] = [];
         const visible = html.replace(/<!--[\s\S]*?-->/g, "");
@@ -186,13 +190,17 @@ export class SysacadAspConnector implements AutogestionConnector {
         return certificados;
     }
 
-    async descargarCertificado(referencia: string, retry = true): Promise<CertificadoDescargado> {
+    async descargarCertificado(referencia: string): Promise<CertificadoDescargado> {
+        return this.kit.withRetry(() => this.readCertificado(referencia), { operation: "sysacad descargarCertificado" });
+    }
+
+    private async readCertificado(referencia: string, retry = true): Promise<CertificadoDescargado> {
         try {
             return await this.fetchBinary(referencia);
         } catch (error) {
             if (!(error instanceof this.kit.LoginRequiredError) || !retry || !this.credentials) throw error;
             await this.login(this.credentials);
-            return this.descargarCertificado(referencia, false);
+            return this.readCertificado(referencia, false);
         }
     }
 
@@ -365,7 +373,9 @@ export class SysacadAspConnector implements AutogestionConnector {
         } catch (e) {
             await reader.cancel().catch(() => {});
             if (e instanceof this.kit.HttpError) throw e;
-            throw new this.kit.HttpError(`No se pudo leer el archivo de ${pathname}: ${(e as Error).message}`);
+            throw new this.kit.HttpError(`No se pudo leer el archivo de ${pathname}: ${(e as Error).message}`, undefined, {
+                cause: e,
+            });
         }
         const out = new Uint8Array(total);
         let offset = 0;
