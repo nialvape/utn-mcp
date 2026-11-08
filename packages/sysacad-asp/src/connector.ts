@@ -342,7 +342,10 @@ export class SysacadAspConnector implements AutogestionConnector {
                 `El archivo de ${pathname} pesa más de ${maxBytes / 1024 / 1024} MB: no se descargó. Bajalo directo de Sysacad.`,
             );
         const declared = Number(res.headers.get("content-length"));
-        if (declared > maxBytes) throw tooBig();
+        if (declared > maxBytes) {
+            await res.body?.cancel();
+            throw tooBig();
+        }
         if (!res.body) {
             const buffer = await res.arrayBuffer();
             if (buffer.byteLength > maxBytes) throw tooBig();
@@ -351,15 +354,18 @@ export class SysacadAspConnector implements AutogestionConnector {
         const reader = res.body.getReader();
         const chunks: Uint8Array[] = [];
         let total = 0;
-        for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            total += value.byteLength;
-            if (total > maxBytes) {
-                await reader.cancel();
-                throw tooBig();
+        try {
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                total += value.byteLength;
+                if (total > maxBytes) throw tooBig();
+                chunks.push(value);
             }
-            chunks.push(value);
+        } catch (e) {
+            await reader.cancel().catch(() => {});
+            if (e instanceof this.kit.HttpError) throw e;
+            throw new this.kit.HttpError(`No se pudo leer el archivo de ${pathname}: ${(e as Error).message}`);
         }
         const out = new Uint8Array(total);
         let offset = 0;
