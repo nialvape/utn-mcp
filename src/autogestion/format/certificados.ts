@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { HttpError } from "../../shared/http.js";
@@ -15,12 +16,7 @@ export async function getCertificados(session: AutogestionSession): Promise<Cert
     return connector.certificados();
 }
 
-const EXTENSIONS: Record<string, string> = { "application/pdf": ".pdf", "text/html": ".html" };
-
-const safeFileName = (name: string) =>
-    name.replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^[-.]+|[-.]+$/g, "").slice(0, 80) || "certificado";
-
-const PDF_MAGIC = [0x25, 0x50];
+const safeFileName = (name: string) => name.replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 80);
 
 export async function descargarCertificado(
     session: AutogestionSession,
@@ -41,19 +37,12 @@ export async function descargarCertificado(
         );
     }
     const { contentType, bytes } = await connector.descargarCertificado(referencia);
-    const baseType = contentType.split(";")[0].trim().toLowerCase();
-    const ext =
-        EXTENSIONS[baseType] ?? (bytes[0] === PDF_MAGIC[0] && bytes[1] === PDF_MAGIC[1] ? ".pdf" : ".bin");
+    const type = contentType.split(";")[0].trim().toLowerCase();
+    const isPdf = type === "application/pdf" || new TextDecoder().decode(bytes.subarray(0, 5)) === "%PDF-";
+    const ext = isPdf ? ".pdf" : type === "text/html" ? ".html" : ".bin";
     const dir = exportsDir();
     await mkdir(dir, { recursive: true });
-    for (let n = 1; n <= 100; n++) {
-        const candidate = join(dir, `${safeFileName(certificado.nombre)}${n === 1 ? "" : `-${n}`}${ext}`);
-        try {
-            await writeFile(candidate, bytes, { flag: "wx" });
-            return { nombre: certificado.nombre, archivo: candidate };
-        } catch (e) {
-            if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-        }
-    }
-    throw new HttpError(`No se pudo guardar "${certificado.nombre}": ya existen 100 archivos con ese nombre.`);
+    const archivo = join(dir, `${safeFileName(certificado.nombre)}-${randomBytes(3).toString("hex")}${ext}`);
+    await writeFile(archivo, bytes, { flag: "wx" });
+    return { nombre: certificado.nombre, archivo };
 }

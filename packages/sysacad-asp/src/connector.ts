@@ -194,14 +194,8 @@ export class SysacadAspConnector implements AutogestionConnector {
         return this.kit.withRetry(() => this.readCertificado(referencia), { operation: "sysacad descargarCertificado" });
     }
 
-    private async readCertificado(referencia: string, retry = true): Promise<CertificadoDescargado> {
-        try {
-            return await this.fetchBinary(referencia);
-        } catch (error) {
-            if (!(error instanceof this.kit.LoginRequiredError) || !retry || !this.credentials) throw error;
-            await this.login(this.credentials);
-            return this.readCertificado(referencia, false);
-        }
+    private async readCertificado(referencia: string): Promise<CertificadoDescargado> {
+        return this.withReLogin(() => this.fetchBinary(referencia));
     }
 
     private async fetchEstadoAcademico(): Promise<string> {
@@ -230,27 +224,30 @@ export class SysacadAspConnector implements AutogestionConnector {
      * Sigue del menú el enlace cuyo texto matchea `linkText`. Si no aparece, el error lista las opciones
      * reales del menú para ajustar. Si la sesión venció, vuelve a loguear una vez y reintenta.
      */
-    private async fetchLinkedPage(linkText: RegExp, label: string, retry = true): Promise<string> {
-        if (!this.menu && this.credentials) {
-            await this.login(this.credentials);
-            retry = false;
-        }
-        if (!this.menu) throw new this.kit.LoginRequiredError(SYSTEM_NAME);
-        const href = findMenuLink(this.menu.html, linkText);
-        if (!href) {
-            const options = [...this.menu.html.matchAll(/<a\s[^>]*href="[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)]
-                .map((m) => m[1].replace(/<[^>]+>/g, "").trim())
-                .filter(Boolean);
-            throw new this.kit.HttpError(
-                `No encontré "${label}" en el menú de Sysacad. Opciones que muestra: ${options.join(", ")}.`,
-            );
-        }
+    private async fetchLinkedPage(linkText: RegExp, label: string): Promise<string> {
+        if (!this.menu && this.credentials) await this.login(this.credentials);
+        return this.withReLogin(async () => {
+            if (!this.menu) throw new this.kit.LoginRequiredError(SYSTEM_NAME);
+            const href = findMenuLink(this.menu.html, linkText);
+            if (!href) {
+                const options = [...this.menu.html.matchAll(/<a\s[^>]*href="[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)]
+                    .map((m) => m[1].replace(/<[^>]+>/g, "").trim())
+                    .filter(Boolean);
+                throw new this.kit.HttpError(
+                    `No encontré "${label}" en el menú de Sysacad. Opciones que muestra: ${options.join(", ")}.`,
+                );
+            }
+            return this.fetchPage(href);
+        });
+    }
+
+    private async withReLogin<T>(read: () => Promise<T>): Promise<T> {
         try {
-            return await this.fetchPage(href);
+            return await read();
         } catch (error) {
-            if (!(error instanceof this.kit.LoginRequiredError) || !retry || !this.credentials) throw error;
+            if (!(error instanceof this.kit.LoginRequiredError) || !this.credentials) throw error;
             await this.login(this.credentials);
-            return this.fetchLinkedPage(linkText, label, false);
+            return read();
         }
     }
 
@@ -294,7 +291,6 @@ export class SysacadAspConnector implements AutogestionConnector {
         return url;
     }
 
-    /** GET, o POST con `body`, siguiendo las redirecciones a mano para quedarse con cada cookie. */
     private async request(url: URL, body?: URLSearchParams): Promise<Page> {
         const raw = await this.requestRaw(url, body);
         return { url: raw.url, html: decode(raw.contentType, raw.buffer) };
