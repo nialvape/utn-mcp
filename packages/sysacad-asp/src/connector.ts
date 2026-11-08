@@ -284,7 +284,6 @@ export class SysacadAspConnector implements AutogestionConnector {
         if (!this.menu) throw new this.kit.LoginRequiredError(SYSTEM_NAME);
         const url = new URL(href, this.menu.url);
         if (url.origin !== new URL(this.menu.url).origin) {
-            // Un enlace interno legítimo no sale del host; no le mandamos la sesión a otro lado.
             throw new this.kit.HttpError(`Sysacad devolvió un enlace fuera de ${new URL(this.menu.url).host}: no se sigue.`);
         }
         if (this.sessionId && !url.searchParams.get("id")) url.searchParams.set("id", this.sessionId);

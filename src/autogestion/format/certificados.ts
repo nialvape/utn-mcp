@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { HttpError } from "../../shared/http.js";
@@ -42,7 +42,7 @@ export async function descargarCertificado(
     const ext = isPdf ? ".pdf" : type === "text/html" ? ".html" : ".bin";
     const dir = exportsDir();
     await mkdir(dir, { recursive: true });
-    const archivo = join(dir, `${safeFileName(certificado.nombre)}-${randomBytes(3).toString("hex")}${ext}`);
+    const archivo = join(dir, `${safeFileName(certificado.nombre)}-${randomUUID()}${ext}`);
     await writeFile(archivo, bytes, { flag: "wx" });
     return { nombre: certificado.nombre, archivo };
 }
