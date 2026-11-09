@@ -115,7 +115,7 @@ export function registerAutogestionTools(server: McpServer, session: Autogestion
                 inputSchema: z.object({
                     referencia: z
                         .string()
-                        .describe("La `referencia` del certificado, tal como la devuelve autogestion_certificados."),
+                        .describe('La `referencia` del certificado, tal como la devuelve autogestion_certificados. Ejemplo: "certalreg.asp".'),
                 }),
                 annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
             },
