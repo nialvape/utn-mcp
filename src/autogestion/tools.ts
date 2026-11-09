@@ -81,28 +81,29 @@ export function registerAutogestionTools(server: McpServer, session: Autogestion
         },
     );
 
-    server.registerTool(
-        "autogestion_certificados",
-        {
-            description:
-                "Certificados y constancias que la autogestión de la regional del usuario ofrece descargar " +
-                "(en Sysacad: el certificado de alumno regular y la actividad académica, con validación por " +
-                "código QR cuando la regional los habilita). Devuelve cada uno con su `nombre` y una " +
-                "`referencia` para pedir la descarga. Es solo lectura: no solicita ni inicia trámites; " +
-                "si el portal no ofrece un certificado online, acá no aparece." + LOGIN_NOTE,
-            annotations: { readOnlyHint: true, openWorldHint: false },
-        },
-        async () => {
-            try {
-                return json(await getCertificados(session));
-            } catch (e) {
-                return failure(e);
-            }
-        },
-    );
-
     // La descarga se guarda en el disco: solo en STDIO, donde el servidor corre en la compu del usuario.
+    // La lista va con ella porque sin descarga su `referencia` no le sirve a nadie.
     if (files.local) {
+        server.registerTool(
+            "autogestion_certificados",
+            {
+                description:
+                    "Certificados y constancias que la autogestión de la regional del usuario ofrece descargar " +
+                    "(en Sysacad: el certificado de alumno regular y la actividad académica, con validación por " +
+                    "código QR cuando la regional los habilita). Devuelve cada uno con su `nombre` y una " +
+                    "`referencia` para pedir la descarga. Es solo lectura: no solicita ni inicia trámites; " +
+                    "si el portal no ofrece un certificado online, acá no aparece." + LOGIN_NOTE,
+                annotations: { readOnlyHint: true, openWorldHint: false },
+            },
+            async () => {
+                try {
+                    return json(await getCertificados(session));
+                } catch (e) {
+                    return failure(e);
+                }
+            },
+        );
+
         server.registerTool(
             "autogestion_descargar_certificado",
             {
