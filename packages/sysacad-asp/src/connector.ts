@@ -1,6 +1,8 @@
 import type {
     AutogestionConnector,
     AutogestionCredentials,
+    CertificadoAutogestion,
+    CertificadoDescargado,
     ConnectorKit,
     Correlatividades,
     EstadoMateria,
@@ -35,6 +37,9 @@ const LOGIN_ERROR_PATTERN = /class\s*=\s*["']?textoError/i;
  * (verificado con cuenta real de FRT, oct 2026).
  */
 const SESSION_ID_PATTERN = /[?&]id=(\d+-\d+)/;
+
+/** Tope por descarga, en bytes: el archivo queda entero en memoria hasta guardarlo. */
+const MAX_CERTIFICADO_BYTES =20 * 1024 * 1024;
 
 interface Page {
     url: string;
@@ -170,6 +175,30 @@ export class SysacadAspConnector implements AutogestionConnector {
         return parseExamenes(this.kit, await this.fetchExamenes());
     }
 
+    async certificados(): Promise<CertificadoAutogestion[]> {
+        return this.kit.withRetry(() => this.readCertificados(), { operation: "sysacad certificados" });
+    }
+
+    private async readCertificados(): Promise<CertificadoAutogestion[]> {
+        const html = await this.fetchLinkedPage(/descarga\s*de\s*certificados/i, "descarga de certificados");
+        const certificados: CertificadoAutogestion[] = [];
+        const visible = html.replace(/<!--[\s\S]*?-->/g, "");
+        for (const [, href, textoEnlace] of visible.matchAll(/<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi)) {
+            const nombre = this.kit.htmlToText(textoEnlace);
+            if (!nombre || /^\s*javascript:/i.test(href) || /menuAlumno/i.test(href)) continue;
+            certificados.push({ nombre, referencia: href });
+        }
+        return certificados;
+    }
+
+    async descargarCertificado(referencia: string): Promise<CertificadoDescargado> {
+        return this.kit.withRetry(() => this.readCertificado(referencia), { operation: "sysacad descargarCertificado" });
+    }
+
+    private async readCertificado(referencia: string): Promise<CertificadoDescargado> {
+        return this.withReLogin(() => this.fetchBinary(referencia));
+    }
+
     private async fetchEstadoAcademico(): Promise<string> {
         return this.fetchLinkedPage(/estado\s*acad/i, "estado académico");
     }
@@ -196,40 +225,36 @@ export class SysacadAspConnector implements AutogestionConnector {
      * Sigue del menú el enlace cuyo texto matchea `linkText`. Si no aparece, el error lista las opciones
      * reales del menú para ajustar. Si la sesión venció, vuelve a loguear una vez y reintenta.
      */
-    private async fetchLinkedPage(linkText: RegExp, label: string, retry = true): Promise<string> {
-        if (!this.menu && this.credentials) {
-            await this.login(this.credentials);
-            retry = false;
-        }
-        if (!this.menu) throw new this.kit.LoginRequiredError(SYSTEM_NAME);
-        const href = findMenuLink(this.menu.html, linkText);
-        if (!href) {
-            const options = [...this.menu.html.matchAll(/<a\s[^>]*href="[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)]
-                .map((m) => m[1].replace(/<[^>]+>/g, "").trim())
-                .filter(Boolean);
-            throw new this.kit.HttpError(
-                `No encontré "${label}" en el menú de Sysacad. Opciones que muestra: ${options.join(", ")}.`,
-            );
-        }
+    private async fetchLinkedPage(linkText: RegExp, label: string): Promise<string> {
+        return this.withReLogin(async () => {
+            if (!this.menu) throw new this.kit.LoginRequiredError(SYSTEM_NAME);
+            const href = findMenuLink(this.menu.html, linkText);
+            if (!href) {
+                const options = [...this.menu.html.matchAll(/<a\s[^>]*href="[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)]
+                    .map((m) => m[1].replace(/<[^>]+>/g, "").trim())
+                    .filter(Boolean);
+                throw new this.kit.HttpError(
+                    `No encontré "${label}" en el menú de Sysacad. Opciones que muestra: ${options.join(", ")}.`,
+                );
+            }
+            return this.fetchPage(href);
+        });
+    }
+
+    /** Corre `read` y, si la sesión venció o todavía no hay menú, loguea una sola vez y la repite. */
+    private async withReLogin<T>(read: () => Promise<T>): Promise<T> {
         try {
-            return await this.fetchPage(href);
+            return await read();
         } catch (error) {
-            if (!(error instanceof this.kit.LoginRequiredError) || !retry || !this.credentials) throw error;
+            if (!(error instanceof this.kit.LoginRequiredError) || !this.credentials) throw error;
             await this.login(this.credentials);
-            return this.fetchLinkedPage(linkText, label, false);
+            return read();
         }
     }
 
     /** GET de una página interna con la sesión; si volvió al login, la sesión venció. */
     private async fetchPage(href: string): Promise<string> {
-        if (!this.menu) throw new this.kit.LoginRequiredError(SYSTEM_NAME);
-        const url = new URL(href, this.menu.url);
-        if (url.origin !== new URL(this.menu.url).origin) {
-            // Un enlace interno legítimo no sale del host; no le mandamos la sesión a otro lado.
-            throw new this.kit.HttpError(`Sysacad devolvió un enlace fuera de ${new URL(this.menu.url).host}: no se sigue.`);
-        }
-        if (this.sessionId && !url.searchParams.get("id")) url.searchParams.set("id", this.sessionId);
-        const page = await this.request(url);
+        const page = await this.request(this.sessionUrl(href));
         if (findLoginForm(page.html, page.url)) {
             this.menu = null;
             this.sessionId = null;
@@ -238,8 +263,42 @@ export class SysacadAspConnector implements AutogestionConnector {
         return page.html;
     }
 
-    /** GET, o POST con `body`, siguiendo las redirecciones a mano para quedarse con cada cookie. */
+    private async fetchBinary(href: string, followedDownload = false): Promise<CertificadoDescargado> {
+        const page = await this.requestRaw(this.sessionUrl(href), undefined, MAX_CERTIFICADO_BYTES);
+        if (!/^text\/html/i.test(page.contentType)) {
+            return { contentType: page.contentType, bytes: new Uint8Array(page.buffer) };
+        }
+        const html = decode(page.contentType, page.buffer);
+        if (findLoginForm(html, page.url)) {
+            this.menu = null;
+            this.sessionId = null;
+            throw new this.kit.LoginRequiredError(SYSTEM_NAME);
+        }
+        if (!followedDownload) {
+            const download = findDownloadLink(html);
+            if (download) return this.fetchBinary(download, true);
+        }
+        return { contentType: page.contentType, bytes: new Uint8Array(page.buffer) };
+    }
+
+    private sessionUrl(href: string): URL {
+        if (!this.menu) throw new this.kit.LoginRequiredError(SYSTEM_NAME);
+        const url = new URL(href, this.menu.url);
+        if (url.origin !== new URL(this.menu.url).origin) {
+            // Un enlace interno legítimo no sale del host; no le mandamos la sesión a otro lado.
+            throw new this.kit.HttpError(`Sysacad devolvió un enlace fuera de ${new URL(this.menu.url).host}: no se sigue.`);
+        }
+        if (this.sessionId && !url.searchParams.get("id")) url.searchParams.set("id", this.sessionId);
+        return url;
+    }
+
     private async request(url: URL, body?: URLSearchParams): Promise<Page> {
+        const raw = await this.requestRaw(url, body);
+        return { url: raw.url, html: decode(raw.contentType, raw.buffer) };
+    }
+
+    /** GET, o POST con `body`, siguiendo las redirecciones a mano para quedarse con cada cookie. */
+    private async requestRaw(url: URL, body?: URLSearchParams, maxBytes?: number): Promise<{ url: string; contentType: string; buffer: ArrayBuffer }> {
         let current = url;
         let method = body ? "POST" : "GET";
         for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
@@ -277,9 +336,52 @@ export class SysacadAspConnector implements AutogestionConnector {
                     retryAfterMs: this.kit.retryAfterMs(res.headers.get("retry-after")),
                 });
             }
-            return { url: current.href, html: decode(res, await res.arrayBuffer()) };
+            const buffer = maxBytes ? await this.readCapped(res, maxBytes, current.pathname) : await res.arrayBuffer();
+            return { url: current.href, contentType: res.headers.get("content-type") ?? "", buffer };
         }
         throw new this.kit.HttpError(`Demasiadas redirecciones desde ${url.pathname}.`);
+    }
+
+    private async readCapped(res: Response, maxBytes: number, pathname: string): Promise<ArrayBuffer> {
+        const tooBig = () =>
+            new this.kit.HttpError(
+                `El archivo de ${pathname} pesa más de ${maxBytes / 1024 / 1024} MB: no se descargó. Bajalo directo de Sysacad.`,
+            );
+        const declared = Number(res.headers.get("content-length"));
+        if (declared > maxBytes) {
+            await res.body?.cancel();
+            throw tooBig();
+        }
+        if (!res.body) {
+            const buffer = await res.arrayBuffer();
+            if (buffer.byteLength > maxBytes) throw tooBig();
+            return buffer;
+        }
+        const reader = res.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        try {
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                total += value.byteLength;
+                if (total > maxBytes) throw tooBig();
+                chunks.push(value);
+            }
+        } catch (e) {
+            await reader.cancel().catch(() => {});
+            if (e instanceof this.kit.HttpError) throw e;
+            throw new this.kit.HttpError(`No se pudo leer el archivo de ${pathname}: ${(e as Error).message}`, undefined, {
+                cause: e,
+            });
+        }
+        const out = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) {
+            out.set(chunk, offset);
+            offset += chunk.byteLength;
+        }
+        return out.buffer;
     }
 
     private cookieHeader(): string {
@@ -288,9 +390,19 @@ export class SysacadAspConnector implements AutogestionConnector {
 }
 
 /** SysacadWEB sirve HTML 4.01 en iso-8859-1; si alguna regional declara UTF-8, se respeta. */
-function decode(res: Response, buffer: ArrayBuffer): string {
-    const utf8 = /charset=utf-?8/i.test(res.headers.get("content-type") ?? "");
+function decode(contentType: string, buffer: ArrayBuffer): string {
+    const utf8 = /charset=utf-?8/i.test(contentType);
     return new TextDecoder(utf8 ? "utf-8" : "iso-8859-1").decode(buffer);
+}
+
+/** FRT no devuelve el PDF directo: sirve una página con un enlace `download` al archivo. Da su href, si lo tiene. */
+function findDownloadLink(html: string): string | null {
+    for (const m of html.matchAll(/<a\s[^>]*>/gi)) {
+        if (!/\bdownload\s*=/i.test(m[0])) continue;
+        const href = /href\s*=\s*"?([^"'\s>]+)"?/i.exec(m[0])?.[1];
+        if (href) return href;
+    }
+    return null;
 }
 
 /** href del primer enlace del menú cuyo texto visible matchea. */

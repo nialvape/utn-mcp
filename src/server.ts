@@ -25,7 +25,7 @@ export async function createServer(aula: AulaSession, files: FileSource, autoges
         try {
             const regional = await aula.getRegional();
             const system = systemForRegional(regional.id, autogestion.systems);
-            if (system) registerAutogestionTools(server, autogestion.sessionFor(system, regional.id));
+            if (system) registerAutogestionTools(server, autogestion.sessionFor(system, regional.id), files);
         } catch (e) {
             logger.warn((e as Error).message);
         }

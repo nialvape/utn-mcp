@@ -51,3 +51,13 @@ export interface ExamenMateria {
     plan?: string;
     codigo?: string;
 }
+
+export interface CertificadoAutogestion {
+    nombre: string;
+    referencia: string;
+}
+
+export interface CertificadoDescargado {
+    contentType: string;
+    bytes: Uint8Array;
+}
