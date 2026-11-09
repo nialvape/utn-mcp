@@ -16,7 +16,9 @@ export async function getCertificados(session: AutogestionSession): Promise<Cert
     return connector.certificados();
 }
 
-const safeFileName = (name: string) => name.replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+/** El nombre viene del HTML del portal: sin separadores de ruta, sin puntos en los bordes y nunca vacío. */
+const safeFileName = (name: string) =>
+    name.replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^[-.]+|[-.]+$/g, "").slice(0, 80) || "certificado";
 
 export async function descargarCertificado(
     session: AutogestionSession,

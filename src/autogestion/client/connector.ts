@@ -28,7 +28,9 @@ export interface AutogestionConnector {
     notasParciales?(): Promise<NotasParcialesMateria[]>;
     /** Historial de exámenes finales, si el sistema lo publica; no todos los conectores lo tienen. */
     examenes?(): Promise<ExamenMateria[]>;
+    /** Certificados que el sistema ofrece descargar, si los publica; no todos los conectores los tienen. */
     certificados?(): Promise<CertificadoAutogestion[]>;
+    /** Baja un certificado por la `referencia` que dio `certificados`. */
     descargarCertificado?(referencia: string): Promise<CertificadoDescargado>;
     /**
      * La sesión del sistema sin la contraseña (cookies, ids de sesión), para guardarla cifrada y retomarla

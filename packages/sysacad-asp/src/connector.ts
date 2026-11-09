@@ -38,7 +38,8 @@ const LOGIN_ERROR_PATTERN = /class\s*=\s*["']?textoError/i;
  */
 const SESSION_ID_PATTERN = /[?&]id=(\d+-\d+)/;
 
-const MAX_CERTIFICADO_BYTES = 20 * 1024 * 1024;
+/** Tope por descarga, en bytes: el archivo queda entero en memoria hasta guardarlo. */
+const MAX_CERTIFICADO_BYTES =20 * 1024 * 1024;
 
 interface Page {
     url: string;
@@ -225,7 +226,6 @@ export class SysacadAspConnector implements AutogestionConnector {
      * reales del menú para ajustar. Si la sesión venció, vuelve a loguear una vez y reintenta.
      */
     private async fetchLinkedPage(linkText: RegExp, label: string): Promise<string> {
-        if (!this.menu && this.credentials) await this.login(this.credentials);
         return this.withReLogin(async () => {
             if (!this.menu) throw new this.kit.LoginRequiredError(SYSTEM_NAME);
             const href = findMenuLink(this.menu.html, linkText);
@@ -241,6 +241,7 @@ export class SysacadAspConnector implements AutogestionConnector {
         });
     }
 
+    /** Corre `read` y, si la sesión venció o todavía no hay menú, loguea una sola vez y la repite. */
     private async withReLogin<T>(read: () => Promise<T>): Promise<T> {
         try {
             return await read();
@@ -284,6 +285,7 @@ export class SysacadAspConnector implements AutogestionConnector {
         if (!this.menu) throw new this.kit.LoginRequiredError(SYSTEM_NAME);
         const url = new URL(href, this.menu.url);
         if (url.origin !== new URL(this.menu.url).origin) {
+            // Un enlace interno legítimo no sale del host; no le mandamos la sesión a otro lado.
             throw new this.kit.HttpError(`Sysacad devolvió un enlace fuera de ${new URL(this.menu.url).host}: no se sigue.`);
         }
         if (this.sessionId && !url.searchParams.get("id")) url.searchParams.set("id", this.sessionId);
@@ -295,6 +297,7 @@ export class SysacadAspConnector implements AutogestionConnector {
         return { url: raw.url, html: decode(raw.contentType, raw.buffer) };
     }
 
+    /** GET, o POST con `body`, siguiendo las redirecciones a mano para quedarse con cada cookie. */
     private async requestRaw(url: URL, body?: URLSearchParams, maxBytes?: number): Promise<{ url: string; contentType: string; buffer: ArrayBuffer }> {
         let current = url;
         let method = body ? "POST" : "GET";
@@ -392,6 +395,7 @@ function decode(contentType: string, buffer: ArrayBuffer): string {
     return new TextDecoder(utf8 ? "utf-8" : "iso-8859-1").decode(buffer);
 }
 
+/** FRT no devuelve el PDF directo: sirve una página con un enlace `download` al archivo. Da su href, si lo tiene. */
 function findDownloadLink(html: string): string | null {
     for (const m of html.matchAll(/<a\s[^>]*>/gi)) {
         if (!/\bdownload\s*=/i.test(m[0])) continue;
