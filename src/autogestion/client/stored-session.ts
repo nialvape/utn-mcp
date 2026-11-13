@@ -147,6 +147,10 @@ class StoredAutogestionSession implements AutogestionSession {
             correlatividades: () => guard(() => connector.correlatividades()),
             notasParciales: connector.notasParciales && (() => guard(() => connector.notasParciales!())),
             examenes: connector.examenes && (() => guard(() => connector.examenes!())),
+            certificados: connector.certificados && (() => guard(() => connector.certificados!())),
+            descargarCertificado:
+                connector.descargarCertificado &&
+                ((referencia: string) => guard(() => connector.descargarCertificado!(referencia))),
         };
     }
 
