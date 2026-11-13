@@ -31,9 +31,9 @@ export const CATALOG: CatalogEntry[] = [
         id: "sysacad-asp",
         name: "Sysacad",
         package: "utn-mcp-sysacad-asp",
-        version: "0.2.0",
-        tarball: `${RELEASES}/sysacad-asp-v0.2.0/utn-mcp-sysacad-asp-0.2.0.tgz`,
-        integrity: "sha512-p4j2fTpE3ZqSvcDQ3Rr6L32dOGNFut0GzyHBVpTpg8mqXrx4Un6CqkiJZG+eznQy+Risko+pcnPhWm+GIJ8haw==",
+        version: "0.3.0",
+        tarball: `${RELEASES}/sysacad-asp-v0.3.0/utn-mcp-sysacad-asp-0.3.0.tgz`,
+        integrity: "sha512-R/9aQi+0tCocWXPMFHY7+oweQLswq3UqNaYjOipiZ+TDs6+NjyM+hypRhkpns329OfPX5SOgP1chcObKcw1nTw==",
         // FRT anduvo con cuenta real (oct 2026) con la versión anterior, que posteaba directo a `menuAlumno.asp`;
         // esta lee el formulario y todavía no entró nadie con ella.
         regionales: Object.fromEntries(SYSACAD_ASP_REGIONALS.map((id) => [id, "candidate" as const])),

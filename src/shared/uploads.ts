@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { extname } from "node:path";
+import type { DownloadOutbox } from "./downloads.js";
 
 export interface UploadedFile {
     name: string;
@@ -16,11 +17,14 @@ export interface UploadLimits {
 }
 
 /**
- * De dónde saca el servidor los archivos que el usuario quiere subir a una plataforma: en STDIO, del
- * disco, que es el suyo; en HTTP, de una subida, porque el servidor puede estar en otra máquina.
- * `owner` es el usuario de la request: una subida solo la puede usar quien la abrió.
+ * Cómo van y vienen los archivos entre el servidor y el usuario: en STDIO, por el disco, que es el suyo;
+ * en HTTP, el servidor puede estar en otra máquina, así que llegan por un link de subida (`inbox`) y se
+ * entregan por uno de bajada (`outbox`). `owner` es el usuario de la request: una subida solo la puede
+ * usar quien la abrió.
  */
-export type FileSource = { local: true } | { local: false; inbox: UploadInbox; owner: string };
+export type FileSource =
+    | { local: true }
+    | { local: false; inbox: UploadInbox; outbox: DownloadOutbox; owner: string };
 
 interface Upload {
     owner: string;
