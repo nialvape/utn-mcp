@@ -4,13 +4,6 @@ import type { AutogestionConnector, AutogestionSystem } from "../src/autogestion
 import { StoredAutogestion } from "../src/autogestion/client/stored-session.js";
 import type { SessionStore } from "../src/shared/store/session-store.js";
 
-/**
- * El wrapper que el modo HTTP le da a las tools tiene que reenviar todos los métodos del conector.
- * En 0.9.3 faltaban `certificados` y `descargarCertificado`, y las tools de certificados contestaban
- * "todavía no tiene conector" aunque el conector sí los tenía.
- */
-
-/** Un store en memoria: solo lo que StoredAutogestion usa. */
 function fakeStore(): SessionStore & { saved: string[] } {
     let session: string | null = null;
     const saved: string[] = [];
@@ -24,7 +17,6 @@ function fakeStore(): SessionStore & { saved: string[] } {
     } as unknown as SessionStore & { saved: string[] };
 }
 
-/** Un conector con todo: certificados incluidos, como el sysacad-asp 0.3.0. */
 function fakeConnector(): AutogestionConnector {
     return {
         systemId: "fake",
@@ -64,8 +56,6 @@ describe("StoredAutogestionSession (modo HTTP)", () => {
         const descargado = await connector.descargarCertificado!("certalreg.asp?id=1-2");
         assert.equal(descargado.contentType, "application/pdf");
         assert.ok(new TextDecoder().decode(descargado.bytes).includes("certalreg.asp?id=1-2"));
-
-        // El guard guarda la sesión después de cada pedido: uno por certificados y otro por la descarga.
         assert.equal(store.saved.length - savesAlSembrar, 2);
     });
 });
