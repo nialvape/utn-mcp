@@ -35,7 +35,7 @@ El agente recorre el aula como lo harías vos: entra al curso, mira los foros y 
 | `autogestion_correlatividades` | Las correlatividades de tu carrera según la autogestión, para cursar y para rendir, en vez de datos fijos del repo. Aparece solo si tu regional tiene un conector de autogestión. |
 | `autogestion_examenes` | Tu historial de finales según la autogestión: fecha, materia, nota o estado, plan y código. Aparece solo si tu regional tiene un conector de autogestión. |
 | `autogestion_certificados` | Los certificados y constancias que tu autogestión ofrece descargar (en Sysacad: certificado de alumno regular y actividad académica, con validación por código QR), cada uno con su referencia para pedir la descarga con `autogestion_descargar_certificado`. Aparece solo si tu regional tiene un conector de autogestión. |
-| `autogestion_descargar_certificado` | Descarga un certificado de la autogestión. En modo local lo guarda en tu compu y la respuesta trae la ruta del archivo; en modo HTTP no se guarda en tu compu, viaja dentro de la respuesta como recurso embebido (si tu cliente no lo puede guardar, usá el modo local). |
+| `autogestion_descargar_certificado` | Descarga un certificado de la autogestión. En modo local lo guarda en tu compu y la respuesta trae la ruta del archivo; en modo HTTP devuelve un link de bajada que vence en 10 minutos: lo abrís en el navegador o, si el agente tiene terminal en tu compu, lo baja él. |
 
 Al abrir una tarea, `aula_open` muestra si la entregaste, cuándo vence y la devolución con la nota. Al abrir un cuestionario, muestra tus intentos y la nota final. Las tools que escriben le piden al agente que te muestre lo que va a hacer y espere tu confirmación.
 

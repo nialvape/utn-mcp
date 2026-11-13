@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { HttpError } from "../../shared/http.js";
+import { MAX_DOWNLOAD_BYTES, type DownloadOutbox } from "../../shared/downloads.js";
 import { exportsDir } from "../../shared/paths.js";
 import { formatSize } from "../../shared/uploads.js";
 import type { AutogestionSession } from "../client/session.js";
@@ -21,26 +22,19 @@ export async function getCertificados(session: AutogestionSession): Promise<Cert
 const safeFileName = (name: string) =>
     name.replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^[-.]+|[-.]+$/g, "").slice(0, 80) || "certificado";
 
-/**
- * Tope de un certificado embebido en la respuesta HTTP, en bytes: son PDF de una o dos páginas, así que
- * 8 MB deja aire de sobra y evita que una respuesta se vuelva enorme. En local no aplica: el archivo va
- * al disco del usuario, no al contexto del modelo.
- */
-const MAX_CERTIFICADO_BYTES = 8 * 1024 * 1024;
-
-/** El certificado bajado y clasificado: lo que comparten el guardado en disco y el embebido en HTTP. */
+/** El certificado bajado y clasificado: lo que comparten el guardado en disco y el link de bajada en HTTP. */
 interface CertificadoBajado {
     nombre: string;
     bytes: Uint8Array;
     /** Ya normalizado, sin parámetros como `; charset=...`. */
     mimeType: string;
-    /** Con punto y en minúscula (".pdf"), para armar el nombre del archivo en local. */
+    /** Con punto y en minúscula (".pdf"), para armar el nombre del archivo. */
     extension: string;
 }
 
 /**
  * Baja el certificado y valida lo que comparten los dos modos: conector, referencia y tipo de contenido.
- * No escribe ni arma blobs: el disco lo toca `descargarCertificado` y el recurso, `certificadoEmbebido`.
+ * No lo entrega: el disco lo toca `descargarCertificado` y el link de bajada, `ofrecerCertificado`.
  */
 async function bajarCertificado(session: AutogestionSession, referencia: string): Promise<CertificadoBajado> {
     const connector = await session.getConnector();
@@ -79,28 +73,34 @@ export async function descargarCertificado(
     return { nombre, archivo };
 }
 
-/** Un certificado listo para viajar embebido en la respuesta HTTP, sin tocar el disco del servidor. */
-export interface CertificadoEmbebido {
-    nombre: string;
-    mimeType: string;
-    bytes: Uint8Array;
-}
-
 /**
- * Baja el certificado para devolverlo embebido en la respuesta (modo HTTP). Nunca lo escribe en el disco
- * del servidor: los bytes viajan en un bloque de recurso y la entrega ya va autenticada por el token del
- * usuario, así que no hace falta un link público.
+ * Baja el certificado y lo deja detrás de un link de bajada (modo HTTP). No lo escribe en el disco del
+ * servidor ni lo mete en la respuesta: los clientes de Claude descartan o rechazan los PDF embebidos, y
+ * el archivo no tiene por qué pasar por el contexto del modelo.
  */
-export async function certificadoEmbebido(
+export async function ofrecerCertificado(
     session: AutogestionSession,
     referencia: string,
-): Promise<CertificadoEmbebido> {
-    const { nombre, bytes, mimeType } = await bajarCertificado(session, referencia);
-    if (bytes.length > MAX_CERTIFICADO_BYTES) {
+    outbox: DownloadOutbox,
+    owner: string,
+): Promise<{
+    nombre: string;
+    archivo: string;
+    mimeType: string;
+    tamanio: number;
+    url: string;
+    vence: string;
+    conTerminal: string;
+}> {
+    const { nombre, bytes, mimeType, extension } = await bajarCertificado(session, referencia);
+    if (bytes.length > MAX_DOWNLOAD_BYTES) {
         throw new HttpError(
-            `El certificado pesa ${formatSize(bytes.length)} y supera el máximo de ${formatSize(MAX_CERTIFICADO_BYTES)} ` +
-                "para mandarlo embebido en modo HTTP. Bajalo con el modo local (STDIO), que lo guarda en tu compu.",
+            `El certificado pesa ${formatSize(bytes.length)} y supera el máximo de ${formatSize(MAX_DOWNLOAD_BYTES)} ` +
+                "de un link de bajada. Bajalo con el modo local (STDIO), que lo guarda en tu compu.",
         );
     }
-    return { nombre, mimeType, bytes };
+    const archivo = `${safeFileName(nombre)}${extension}`;
+    const { url, expiresAt } = outbox.offer(owner, { name: archivo, mimeType, bytes });
+    const conTerminal = `curl -fsS -o "${archivo}" "${url}"`;
+    return { nombre, archivo, mimeType, tamanio: bytes.length, url, vence: expiresAt, conTerminal };
 }

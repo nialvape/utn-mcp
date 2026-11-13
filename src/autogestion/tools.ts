@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { FileSource } from "../shared/uploads.js";
 import type { AutogestionSession } from "./client/session.js";
-import { certificadoEmbebido, descargarCertificado, getCertificados } from "./format/certificados.js";
+import { descargarCertificado, getCertificados, ofrecerCertificado } from "./format/certificados.js";
 import { getCorrelatividades } from "./format/correlatividades.js";
 import { getEstadoAcademico } from "./format/estado-academico.js";
 import { getExamenes } from "./format/examenes.js";
@@ -102,53 +102,75 @@ export function registerAutogestionTools(server: McpServer, session: Autogestion
         },
     );
 
-    // En local el servidor corre en la compu del usuario y el archivo queda en su disco; en HTTP puede
-    // estar en otra máquina, así que el certificado viaja adentro de la respuesta como recurso embebido.
-    const descargaDescripcion = files.local
-        ? "Descarga un certificado o constancia de la autogestión y lo guarda en la compu del usuario. " +
-          "La `referencia` sale de autogestion_certificados; la respuesta trae `archivo` con la ruta del " +
-          "archivo guardado (PDF cuando el sistema lo genera así). Es solo lectura: baja un documento que " +
-          "el portal ya permite descargar, no inicia trámites."
-        : "Descarga un certificado o constancia de la autogestión. La `referencia` sale de " +
-          "autogestion_certificados. En modo HTTP el archivo NO se guarda en la compu del usuario: viaja " +
-          "adentro de esta respuesta como recurso embebido (blob base64 + `mimeType`), junto a los datos " +
-          "en texto. Si tu cliente no puede guardar recursos embebidos, decile al usuario que use el modo " +
-          "local (STDIO), donde el servidor corre en su compu y el certificado sí queda en su disco. Es " +
-          "solo lectura: baja un documento que el portal ya permite descargar, no inicia trámites.";
+    const descargarSchema = z.object({
+        referencia: z
+            .string()
+            .describe('La `referencia` del certificado, tal como la devuelve autogestion_certificados. Ejemplo: "certalreg.asp".'),
+    });
 
-    server.registerTool(
-        "autogestion_descargar_certificado",
-        {
-            description: descargaDescripcion + LOGIN_NOTE,
-            inputSchema: z.object({
-                referencia: z
-                    .string()
-                    .describe('La `referencia` del certificado, tal como la devuelve autogestion_certificados. Ejemplo: "certalreg.asp".'),
-            }),
-            annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
-        },
-        async ({ referencia }) => {
-            try {
-                if (files.local) return json(await descargarCertificado(session, referencia));
-                const { nombre, mimeType, bytes } = await certificadoEmbebido(session, referencia);
-                return {
-                    content: [
-                        { type: "text" as const, text: JSON.stringify({ nombre, mimeType }) },
-                        {
-                            type: "resource" as const,
-                            resource: {
-                                uri: `autogestion://certificados/${referencia}`,
-                                mimeType,
-                                blob: Buffer.from(bytes).toString("base64"),
+    // En local el servidor corre en la compu del usuario y el archivo queda en su disco; en HTTP puede
+    // estar en otra máquina, así que se entrega por un link de bajada.
+    if (files.local) {
+        server.registerTool(
+            "autogestion_descargar_certificado",
+            {
+                description:
+                    "Descarga un certificado o constancia de la autogestión y lo guarda en la compu del " +
+                    "usuario. La `referencia` sale de autogestion_certificados; la respuesta trae `archivo` " +
+                    "con la ruta del archivo guardado (PDF cuando el sistema lo genera así). Es solo " +
+                    "lectura: baja un documento que el portal ya permite descargar, no inicia trámites." + LOGIN_NOTE,
+                inputSchema: descargarSchema,
+                annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+            },
+            async ({ referencia }) => {
+                try {
+                    return json(await descargarCertificado(session, referencia));
+                } catch (e) {
+                    return failure(e);
+                }
+            },
+        );
+    } else {
+        const { outbox, owner } = files;
+        server.registerTool(
+            "autogestion_descargar_certificado",
+            {
+                description:
+                    "Descarga un certificado o constancia de la autogestión y devuelve un link para bajarlo. " +
+                    "La `referencia` sale de autogestion_certificados. El link (`url`) vence en 10 minutos y " +
+                    "se puede usar varias veces hasta entonces; `archivo` es el nombre con el que se guarda.\n\n" +
+                    "Cómo hacérselo llegar al usuario:\n" +
+                    "- Si podés ejecutar comandos en la compu del usuario, bajalo vos con el comando de " +
+                    "`conTerminal` y decile dónde quedó.\n" +
+                    "- Si no, o si tus comandos corren en un sandbox remoto (ahí el archivo no le llega), " +
+                    "pasale el `url`: lo abre en el navegador, también en el celu, y se descarga.\n\n" +
+                    "Si el link venció, volvé a llamar a esta tool. Es solo lectura: baja un documento que el " +
+                    "portal ya permite descargar, no inicia trámites." + LOGIN_NOTE,
+                inputSchema: descargarSchema,
+                annotations: { readOnlyHint: true, openWorldHint: false },
+            },
+            async ({ referencia }) => {
+                try {
+                    const oferta = await ofrecerCertificado(session, referencia, outbox, owner);
+                    return {
+                        content: [
+                            { type: "text" as const, text: JSON.stringify(oferta) },
+                            // El link también como `resource_link`, para los clientes que lo muestran como archivo.
+                            {
+                                type: "resource_link" as const,
+                                uri: oferta.url,
+                                name: oferta.archivo,
+                                mimeType: oferta.mimeType,
+                                size: oferta.tamanio,
                             },
-                        },
-                    ],
-                };
-            } catch (e) {
-                return failure(e);
-            }
-        },
-    );
+                        ],
+                    };
+                } catch (e) {
+                    return failure(e);
+                }
+            },
+        );
+    }
 
     server.registerTool(
         "autogestion_correlatividades",

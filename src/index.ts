@@ -18,6 +18,7 @@ import { startHttpServer, userIdOf } from "./http.js";
 import { accessPolicyFromEnv } from "./oauth/access.js";
 import { redirectAllowlistFromEnv } from "./oauth/redirects.js";
 import { createServer } from "./server.js";
+import { DownloadOutbox } from "./shared/downloads.js";
 import { logger } from "./shared/logger.js";
 import { SqliteStore } from "./shared/store/sqlite-store.js";
 import { UploadInbox } from "./shared/uploads.js";
@@ -63,7 +64,7 @@ async function main() {
 
     if (values.http) {
         // Cada request trae el token de un usuario del store y se arma con su sesión. Los archivos
-        // llegan por links de subida: el servidor puede no estar en la compu de quien entrega.
+        // van y vienen por links de subida y de bajada: el servidor puede no estar en la compu del usuario.
         const port = Number(values.port);
         const publicUrl = process.env.UTN_MCP_PUBLIC_URL?.replace(/\/+$/, "") || undefined;
         const baseUrl = publicUrl ?? `http://127.0.0.1:${port}`;
@@ -71,13 +72,14 @@ async function main() {
         const loginUrl = process.env.UTN_MCP_LOGIN_URL || `${baseUrl}/login`;
         const store = await SqliteStore.open();
         const inbox = new UploadInbox(baseUrl);
+        const outbox = new DownloadOutbox(baseUrl);
         // Atiende a usuarios de cualquier regional: se instalan todos los conectores del catálogo.
         await installCatalog();
         const autogestion = new StoredAutogestion(baseUrl, store, await loadSystems());
         const factory = (ctx: { authInfo?: AuthInfo }) => {
             const userId = userIdOf(ctx.authInfo);
             const aula = new StoredAulaSession(store, userId, loginUrl);
-            return createServer(aula, { local: false, inbox, owner: String(userId) }, autogestion.forUser(userId));
+            return createServer(aula, { local: false, inbox, outbox, owner: String(userId) }, autogestion.forUser(userId));
         };
         const options = {
             host: values.host,
@@ -87,7 +89,7 @@ async function main() {
             redirects: redirectAllowlistFromEnv(),
             adminSecret: process.env.UTN_MCP_ADMIN_SECRET || undefined,
         };
-        startHttpServer(factory, options, store, inbox, autogestion);
+        startHttpServer(factory, options, store, { inbox, outbox }, autogestion);
     } else {
         // STDIO: un solo usuario, el de la compu, con la misma sesión para todas las conexiones.
         const aula = new LocalSession();
