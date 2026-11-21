@@ -13,6 +13,9 @@ export function configDir(): string {
 /** Token de Moodle del modo local. */
 export const sessionFile = () => join(configDir(), "session.json");
 
+/** Mapeo materia → repo de GitHub para publicar TPs (aula_tp_to_github), editable a mano. */
+export const tpReposFile = () => join(configDir(), "tp-repos.json");
+
 /** Base de usuarios, tokens y sesiones del modo HTTP: UTN_MCP_DB o un SQLite en la carpeta de configuración. */
 export const storeFile = () => process.env.UTN_MCP_DB ?? join(configDir(), "utn-mcp.db");
 

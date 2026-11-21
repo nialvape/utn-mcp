@@ -30,6 +30,7 @@ El agente recorre el aula como lo harías vos: entra al curso, mira los foros y 
 | `aula_choice_answer` | Responde una elección o te anota en un grupo. |
 | `aula_send_message` | Manda un mensaje privado a un docente o compañero. |
 | `aula_calendar_add_event` | Agrega un recordatorio a tu calendario del aula. |
+| `aula_tp_to_github` | Publica los archivos de una consigna (cualquier tipo: ipynb, pdf, md, docx, zip...) en un repo tuyo de GitHub, byte-idénticos y como PR con el sha256 y la fuente en la descripción: vos revisás y mergeás. Necesita `GITHUB_TOKEN` en el entorno. |
 | `autogestion_cursando_ahora` | Las materias que estás cursando ahora según la autogestión, con comisión, aula y horarios cuando el sistema los publica. Incluye electivas. Aparece solo si tu regional tiene un conector de autogestión. |
 | `autogestion_estado_academico` | Tu estado académico según la autogestión de tu regional: cada materia con su estado, plan, nota y fecha. Aparece solo si tu regional tiene un conector de autogestión. |
 | `autogestion_correlatividades` | Las correlatividades de tu carrera según la autogestión, para cursar y para rendir, en vez de datos fijos del repo. Aparece solo si tu regional tiene un conector de autogestión. |
@@ -38,6 +39,9 @@ El agente recorre el aula como lo harías vos: entra al curso, mira los foros y 
 | `autogestion_descargar_certificado` | Descarga un certificado de la autogestión. En modo local lo guarda en tu compu y la respuesta trae la ruta del archivo; en modo HTTP devuelve un link de bajada que vence en 10 minutos: lo abrís en el navegador o, si el agente tiene terminal en tu compu, lo baja él. |
 
 Al abrir una tarea, `aula_open` muestra si la entregaste, cuándo vence y la devolución con la nota. Al abrir un cuestionario, muestra tus intentos y la nota final. Las tools que escriben le piden al agente que te muestre lo que va a hacer y espere tu confirmación.
+
+### TPs a GitHub
+`aula_tp_to_github` baja los adjuntos de una consigna (o el notebook de Colab/Drive que linkea, si no hay adjuntos) y los sube tal cual a una rama nueva de tu repo, con un PR que trae curso, consigna, link del aula y sha256 de cada archivo. Nunca toca la rama default ni mergea. Para saber a qué repo va cada materia mira, en este orden: el parámetro `repo` si lo pasás, el mapeo `tp-repos.json` en la carpeta de configuración (por id de curso o por nombre de materia, por ejemplo `{ "cursos": [ { "cursoId": 1408, "materia": "Algoritmos Genéticos", "repo": "FranprzDev/HeuristcsAndML" } ] }`) y, si no hay mapeo, una heurística sobre tus repos (nombre, descripción y README). Cuando no hay una sola respuesta clara no escribe nada: te devuelve los candidatos para que elijas.
 
 ### Archivos que puede leer
 - **PDF**: el texto, página por página. Los **escaneados** se mandan como imagen de cada página, y el agente los lee igual.

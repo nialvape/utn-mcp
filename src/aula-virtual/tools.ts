@@ -15,6 +15,7 @@ import { ROOT } from "./format/address.js";
 import { readAulaFile } from "./format/files.js";
 import { viewGrades } from "./format/grades.js";
 import { buildStudyPack } from "./format/study-pack.js";
+import { tpToGithubPr } from "./format/tp-github.js";
 import { open } from "./format/navigate.js";
 import { createUploadLink, submitAssignment } from "./format/submission.js";
 
@@ -241,6 +242,73 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
             },
         );
     }
+
+    server.registerTool(
+        "aula_tp_to_github",
+        {
+            description:
+                "Publica los archivos de una consigna (TP) del aula en un repo de GitHub como un PR " +
+                "verificable: baja los adjuntos byte-idénticos (sha256, cualquier tipo de archivo: " +
+                "ipynb, pdf, md, docx, zip...), crea una rama nueva desde la default que contiene solo " +
+                "esos archivos y abre el PR con la fuente (curso, consigna, link del aula), los hashes " +
+                "y la verificación en la descripción. El usuario revisa y mergea; la tool nunca mergea " +
+                "ni toca la rama default.\n\n" +
+                "Requiere GITHUB_TOKEN en el entorno del servidor, con acceso al repo. El repo se " +
+                "resuelve así: el argumento `repo` si lo pasás; si no, el mapeo materia → repo de " +
+                "tp-repos.json (por id de curso o por nombre de materia); si no, una heurística sobre " +
+                "tus repos de GitHub (nombre, descripción y README). Si no hay una sola respuesta " +
+                "clara, la respuesta es `estado: \"elegir_repo\"` con candidatos y no se escribe " +
+                "nada: mostrale las opciones al usuario y volvé a llamar con `repo`.\n\n" +
+                "Si la consigna no tiene adjuntos en el aula pero linkea un notebook de Colab/Drive " +
+                "público (el TP típico), la tool baja ese notebook y lo aclara en la verificación del " +
+                "PR; cualquier otro link externo da error.",
+            inputSchema: z.object({
+                direccion: z
+                    .string()
+                    .describe(
+                        'Dirección del módulo de la consigna, de aula_open. Ej: "/curso/1408/mod/34806".',
+                    ),
+                repo: z
+                    .string()
+                    .optional()
+                    .describe(
+                        'Repo destino, "owner/nombre". Ej: "FranprzDev/HeuristcsAndML". Si no lo pasás, ' +
+                            "se resuelve por el mapeo materia → repo (tp-repos.json) o por nombre/README " +
+                            "de tus repos, y si hay duda la tool devuelve candidatos para elegir.",
+                    ),
+                carpeta: z
+                    .string()
+                    .optional()
+                    .describe(
+                        'Carpeta del TP dentro del repo. Ej: "TP5-Aplicaciones-AG". Por defecto se arma ' +
+                            'del nombre de la consigna ("TP 5 - Aplicaciones de AG" → "TP5-Aplicaciones-AG"). ' +
+                            "Los archivos quedan adentro con su nombre original.",
+                    ),
+                archivos: z
+                    .array(z.string())
+                    .optional()
+                    .describe(
+                        "Nombres exactos de los adjuntos a incluir; por defecto todos los de la consigna.",
+                    ),
+                rama: z
+                    .string()
+                    .optional()
+                    .describe('Rama nueva a crear; por defecto "tp/<carpeta>" en minúsculas.'),
+                titulo: z
+                    .string()
+                    .optional()
+                    .describe("Título del PR; por defecto el nombre de la consigna en el aula."),
+            }),
+            annotations: { readOnlyHint: false, openWorldHint: true },
+        },
+        async (args) => {
+            try {
+                return json(await tpToGithubPr(session, args));
+            } catch (e) {
+                return failure(e);
+            }
+        },
+    );
 
     // --- Escritura: lo que sigue cambia algo en el aula, y casi todo queda a la vista de otras personas. ---
 
