@@ -37,7 +37,8 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<T> 
     });
     const data = (await res.json().catch(() => ({}))) as { message?: string; errors?: { message?: string }[] };
     if (!res.ok) {
-        const detail = data.message ?? data.errors?.[0]?.message ?? "";
+        // GitHub pone el motivo real en errors[] (ej: "A pull request already exists"): va todo al mensaje.
+        const detail = [data.message, ...(data.errors?.map((e) => e.message) ?? [])].filter(Boolean).join(" — ");
         throw new Error(`GitHub ${method} ${path} falló: HTTP ${res.status}${detail ? ` — ${detail}` : ""}`);
     }
     return data as T;
@@ -90,6 +91,28 @@ export async function getRepoRef(repo: string): Promise<GithubRepoRef> {
     return { defaultBranch: info.default_branch, headSha: ref.object.sha };
 }
 
+/** El sha de la punta de una rama, o null si la rama no existe (para reusarla en vez de fallar). */
+export async function getBranchSha(repo: string, branch: string): Promise<string | null> {
+    const res = await fetch(`${API}/repos/${repo}/git/ref/heads/${branch}`, {
+        headers: { authorization: `Bearer ${token()}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28" },
+        signal: AbortSignal.timeout(15_000),
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`GitHub GET /repos/${repo}/git/ref/heads/${branch} falló: HTTP ${res.status}`);
+    return ((await res.json()) as { object: { sha: string } }).object.sha;
+}
+
+/** El blob sha de un archivo en una rama, o null si no existe (para decidir crear/actualizar/omitir). */
+export async function getFileSha(repo: string, branch: string, path: string): Promise<string | null> {
+    const res = await fetch(`${API}/repos/${repo}/contents/${path}?ref=${encodeURIComponent(branch)}`, {
+        headers: { authorization: `Bearer ${token()}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28" },
+        signal: AbortSignal.timeout(15_000),
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`GitHub GET /repos/${repo}/contents/${path} falló: HTTP ${res.status}`);
+    return ((await res.json()) as { sha: string }).sha;
+}
+
 export async function createBranch(repo: string, branch: string, fromSha: string): Promise<void> {
     try {
         await api("POST", `/repos/${repo}/git/refs`, { ref: `refs/heads/${branch}`, sha: fromSha });
@@ -110,14 +133,26 @@ export async function putFile(
     path: string,
     bytes: Uint8Array,
     message: string,
+    sha?: string,
 ): Promise<GithubCommittedFile> {
     const res = await api<{ content: { sha: string } }>("PUT", `/repos/${repo}/contents/${path}`, {
         message,
         content: Buffer.from(bytes).toString("base64"),
         branch,
+        ...(sha ? { sha } : {}),
     });
     const expected = gitBlobSha(bytes);
     return { path, blobSha: res.content.sha, verified: res.content.sha === expected };
+}
+
+/** El PR abierto de una rama, o null si no hay (idempotencia: la misma corrida devuelve el mismo PR). */
+export async function findOpenPullRequest(repo: string, head: string): Promise<{ url: string; number: number } | null> {
+    const owner = repo.split("/")[0];
+    const prs = await api<{ html_url: string; number: number }[]>(
+        "GET",
+        `/repos/${repo}/pulls?state=open&head=${encodeURIComponent(`${owner}:${head}`)}`,
+    );
+    return prs.length ? { url: prs[0].html_url, number: prs[0].number } : null;
 }
 
 export async function createPullRequest(
@@ -126,7 +161,7 @@ export async function createPullRequest(
     base: string,
     title: string,
     body: string,
-): Promise<{ url: string; number: number }> {
+): Promise<{ url: string; number: number; existente: boolean }> {
     try {
         const pr = await api<{ html_url: string; number: number }>("POST", `/repos/${repo}/pulls`, {
             title,
@@ -134,10 +169,11 @@ export async function createPullRequest(
             head,
             base,
         });
-        return { url: pr.html_url, number: pr.number };
+        return { url: pr.html_url, number: pr.number, existente: false };
     } catch (e) {
         if ((e as Error).message.includes("A pull request already exists")) {
-            throw new Error(`Ya hay un PR abierto para la rama "${head}" en ${repo}.`);
+            const existente = await findOpenPullRequest(repo, head);
+            if (existente) return { ...existente, existente: true };
         }
         throw e;
     }

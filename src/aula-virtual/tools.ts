@@ -253,6 +253,8 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
                 "esos archivos y abre el PR con la fuente (curso, consigna, link del aula), los hashes " +
                 "y la verificación en la descripción. El usuario revisa y mergea; la tool nunca mergea " +
                 "ni toca la rama default.\n\n" +
+                "Si la rama o el PR ya existen (un reintento o una re-bajada del TP), la tool actualiza " +
+                "los archivos y devuelve el PR existente en vez de fallar.\n\n" +
                 "Requiere GITHUB_TOKEN en el entorno del servidor, con acceso al repo. El repo se " +
                 "resuelve así: el argumento `repo` si lo pasás; si no, el mapeo materia → repo de " +
                 "tp-repos.json (por id de curso o por nombre de materia); si no, una heurística sobre " +

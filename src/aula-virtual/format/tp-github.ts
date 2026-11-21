@@ -5,7 +5,15 @@ import { AddressLevel, parseAddress } from "./address.js";
 import { downloadAulaFile } from "./file-download.js";
 import { userFacingUrl } from "./files.js";
 import { findModule } from "./navigate.js";
-import { createBranch, createPullRequest, getRepoRef, putFile } from "../../shared/github.js";
+import {
+    createBranch,
+    createPullRequest,
+    getBranchSha,
+    getFileSha,
+    getRepoRef,
+    gitBlobSha,
+    putFile,
+} from "../../shared/github.js";
 import { tpReposFile } from "../../shared/paths.js";
 import { resolveTpRepo } from "./tp-repos.js";
 
@@ -180,19 +188,40 @@ export async function tpToGithubPr(session: AulaSession, args: TpToGithubArgs) {
     const carpeta = carpetaBase ? `${carpetaBase}/${carpetaPropia}` : carpetaPropia;
     const rama = args.rama ?? `tp/${slugify(carpetaPropia)}`;
 
+    // Idempotente: si la rama, los archivos o el PR ya existen (reintento o re-bajada del TP),
+    // se actualizan o se devuelven tal cual en vez de fallar.
     const repoRef = await getRepoRef(repo);
-    await createBranch(repo, rama, repoRef.headSha);
+    const ramaYaExistia = (await getBranchSha(repo, rama)) !== null;
+    if (!ramaYaExistia) await createBranch(repo, rama, repoRef.headSha);
 
     const publicados = [];
     for (const archivo of archivos) {
         const path = `${carpeta}/${safeName(archivo.filename)}`;
-        const committed = await putFile(repo, rama, path, archivo.bytes, `Add ${path} from the aula TP`);
+        const actual = ramaYaExistia ? await getFileSha(repo, rama, path) : null;
+        if (actual === gitBlobSha(archivo.bytes)) {
+            publicados.push({ path, sha256: archivo.sha256, bytes: archivo.size, blobSha: actual, cambio: "igual" as const });
+            continue;
+        }
+        const committed = await putFile(
+            repo,
+            rama,
+            path,
+            archivo.bytes,
+            `${actual ? "Update" : "Add"} ${path} from the aula TP`,
+            actual ?? undefined,
+        );
         if (!committed.verified) {
             throw new Error(
                 `GitHub no guardó byte-idéntico "${path}" (blob sha ${committed.blobSha}). Revisá el repo antes de reintentar.`,
             );
         }
-        publicados.push({ path, sha256: archivo.sha256, bytes: archivo.size, blobSha: committed.blobSha });
+        publicados.push({
+            path,
+            sha256: archivo.sha256,
+            bytes: archivo.size,
+            blobSha: committed.blobSha,
+            cambio: (actual ? "actualizado" : "nuevo") as "actualizado" | "nuevo",
+        });
     }
 
     const fuente = module.url ?? (adjuntos[0] ? userFacingUrl(adjuntos[0].fileurl) : undefined);
@@ -215,7 +244,8 @@ export async function tpToGithubPr(session: AulaSession, args: TpToGithubArgs) {
 
     return {
         estado: "publicado" as const,
-        pr: { url: pr.url, numero: pr.number },
+        pr: { url: pr.url, numero: pr.number, existente: pr.existente },
+        ramaReusada: ramaYaExistia,
         repo,
         repoOrigen: resolution.origen,
         rama,

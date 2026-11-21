@@ -30,7 +30,7 @@ El agente recorre el aula como lo harías vos: entra al curso, mira los foros y 
 | `aula_choice_answer` | Responde una elección o te anota en un grupo. |
 | `aula_send_message` | Manda un mensaje privado a un docente o compañero. |
 | `aula_calendar_add_event` | Agrega un recordatorio a tu calendario del aula. |
-| `aula_tp_to_github` | Publica los archivos de una consigna (cualquier tipo: ipynb, pdf, md, docx, zip...) en un repo tuyo de GitHub, byte-idénticos y como PR con el sha256 y la fuente en la descripción: vos revisás y mergeás. Necesita `GITHUB_TOKEN` en el entorno. |
+| `aula_tp_to_github` | Publica los archivos de una consigna (cualquier tipo: ipynb, pdf, md, docx, zip...) en un repo tuyo de GitHub, byte-idénticos y como PR con el sha256 y la fuente en la descripción: vos revisás y mergeás. Si ya existen la rama o el PR, actualiza en vez de fallar. Necesita `GITHUB_TOKEN` en el entorno. |
 | `autogestion_cursando_ahora` | Las materias que estás cursando ahora según la autogestión, con comisión, aula y horarios cuando el sistema los publica. Incluye electivas. Aparece solo si tu regional tiene un conector de autogestión. |
 | `autogestion_estado_academico` | Tu estado académico según la autogestión de tu regional: cada materia con su estado, plan, nota y fecha. Aparece solo si tu regional tiene un conector de autogestión. |
 | `autogestion_correlatividades` | Las correlatividades de tu carrera según la autogestión, para cursar y para rendir, en vez de datos fijos del repo. Aparece solo si tu regional tiene un conector de autogestión. |
