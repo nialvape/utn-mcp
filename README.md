@@ -19,6 +19,7 @@ El agente recorre el aula como lo harías vos: entra al curso, mira los foros y 
 | `aula_list_courses` | Lista tus cursos. Es el punto de partida. |
 | `aula_open` | Entra a un curso, un módulo, un foro o una discusión. Cada respuesta trae las direcciones de lo que hay adentro y de un nivel más arriba, así el agente navega sin perderse. |
 | `aula_read_file` | Lee un archivo del aula, por partes cuando es largo. |
+| `aula_download_file` | Baja archivos del aula tal cual son (los adjuntos de una consigna, una plantilla, un dataset) para trabajar con ellos. En modo local los guarda en tu compu, en la carpeta que elija el agente; en modo HTTP devuelve un link de bajada por archivo, que vence a los 10 minutos (configurable). |
 | `aula_grades` | Tus calificaciones en un curso, incluidas las que el docente carga a mano. |
 | `aula_study_pack` | Une en un solo PDF con índice los apuntes que elijas de una materia (un 'machacado'), guardado en tu compu. Solo en modo local. |
 | `aula_get_site_info` | Datos de tu usuario y de tu regional en el aula virtual. |
@@ -182,6 +183,7 @@ La configuración va en variables de entorno o en un `.env` en la carpeta desde 
 | `UTN_MCP_ADMIN_SECRET` | Habilita la API de `/admin` para un panel de cuentas tuyo: `POST /admin/usuarios` (todos los usuarios con sus apps), `/admin/clientes` y `/admin/clientes/revocar` (las apps de un usuario, por email), `/admin/regionales` (las regionales con su soporte) y `/admin/verificar` (entra al aula con usuario y contraseña, como el login de OAuth, y le guarda la sesión; si Microsoft pide segundo factor, devuelve el paso y se sigue con `/admin/segundo-factor`). | — |
 | `UTN_MCP_LOGIN_URL` | Página donde el usuario renueva su sesión del aula; el agente se la pasa. | `<UTN_MCP_PUBLIC_URL>/login` |
 | `UTN_MCP_DB`, `UTN_MCP_KEY` | Base de sesiones y su clave de cifrado (32 bytes en base64). | En la carpeta de config |
+| `UTN_MCP_DOWNLOAD_TTL_MIN`, `UTN_MCP_DOWNLOAD_MAX_MB`, `UTN_MCP_DOWNLOAD_MAX_OPEN` | Links de bajada del modo HTTP (certificados y archivos del aula): minutos hasta que vencen, MB por archivo (quedan en memoria hasta vencer) y links abiertos por usuario, que también es el máximo de archivos por llamada a `aula_download_file`. | 10, 10 y 5 |
 | `UTN_MCP_PACK_MAX_FILES`, `UTN_MCP_PACK_MAX_MB`, `UTN_MCP_PACK_MAX_FINAL_MB` | Topes del compilado de estudio (`aula_study_pack`, solo modo local): archivos por pack, MB de descarga total y MB del PDF final, que se arma entero en memoria. | 150, 300 y 30 |
 
 Con Docker, detrás de un reverse proxy con HTTPS en la misma máquina (red host, para que el rate limit del login vea la IP real):
