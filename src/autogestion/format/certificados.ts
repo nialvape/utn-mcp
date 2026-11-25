@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { HttpError } from "../../shared/http.js";
-import { MAX_DOWNLOAD_BYTES, type DownloadOutbox } from "../../shared/downloads.js";
+import type { DownloadOutbox } from "../../shared/downloads.js";
 import { exportsDir } from "../../shared/paths.js";
 import { formatSize } from "../../shared/uploads.js";
 import type { AutogestionSession } from "../client/session.js";
@@ -93,9 +93,10 @@ export async function ofrecerCertificado(
     conTerminal: string;
 }> {
     const { nombre, bytes, mimeType, extension } = await bajarCertificado(session, referencia);
-    if (bytes.length > MAX_DOWNLOAD_BYTES) {
+    const { maxBytes } = outbox.limits;
+    if (bytes.length > maxBytes) {
         throw new HttpError(
-            `El certificado pesa ${formatSize(bytes.length)} y supera el máximo de ${formatSize(MAX_DOWNLOAD_BYTES)} ` +
+            `El certificado pesa ${formatSize(bytes.length)} y supera el máximo de ${formatSize(maxBytes)} ` +
                 "de un link de bajada. Bajalo con el modo local (STDIO), que lo guarda en tu compu.",
         );
     }

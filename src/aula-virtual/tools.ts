@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod";
+import { ttlText } from "../shared/downloads.js";
 import type { FileSource } from "../shared/uploads.js";
 import { getSiteInfo } from "./client/client.js";
 import type { AulaSession } from "./client/session.js";
@@ -12,6 +13,7 @@ import {
     sendMessage,
 } from "./format/actions.js";
 import { ROOT } from "./format/address.js";
+import { downloadToDisk, MAX_FILES_PER_CALL, offerDownloads } from "./format/download.js";
 import { readAulaFile } from "./format/files.js";
 import { viewGrades } from "./format/grades.js";
 import { buildStudyPack } from "./format/study-pack.js";
@@ -235,6 +237,97 @@ export function registerAulaVirtualTools(server: McpServer, session: AulaSession
             async ({ direccion, archivos }) => {
                 try {
                     return json(await buildStudyPack(session, direccion, archivos));
+                } catch (e) {
+                    return failure(e);
+                }
+            },
+        );
+    }
+
+    const urlsSchema = z
+        .array(z.string())
+        .min(1)
+        .describe(
+            "Las `url` de los archivos tal como las devuelve aula_open (los adjuntos de una consigna, un " +
+                'apunte, una plantilla). Ej: ["https://frt.cvg.utn.edu.ar/webservice/pluginfile.php/123/mod_assign/introattachment/0/TP5.ipynb"].',
+        );
+    const DOWNLOAD_INTRO =
+        "Baja archivos del aula tal cual son (los bytes exactos, cualquier formato: ipynb, docx, zip, " +
+        "datasets...) para que el usuario trabaje con ellos: los adjuntos de la consigna de un TP, una " +
+        "plantilla, un apunte. Las `url` salen de aula_open; conviene pasar todas las de una consigna en " +
+        "una sola llamada. Los bytes no pasan por esta respuesta: si hay que subirlos a otro lado (un " +
+        "repo, Drive), hacelo desde donde quedaron. Para leer el contenido usá aula_read_file.\n\n" +
+        "Lo que no se pudo bajar queda en `omitidos` con el motivo; el resto se baja igual.";
+
+    // En local el servidor es la compu del usuario y los archivos quedan en su disco; en HTTP puede estar
+    // en otra máquina, así que se entregan por links de bajada.
+    if (files.local) {
+        server.registerTool(
+            "aula_download_file",
+            {
+                description:
+                    DOWNLOAD_INTRO +
+                    "\n\nLos guarda en la compu del usuario: en `carpeta` si la pasás (por ejemplo, la carpeta " +
+                    "del proyecto donde va a hacer el TP) o en la de exports. No pisa nada: si el nombre ya " +
+                    "existe, agrega -2, -3... La respuesta trae, por archivo, `ruta`, `tamanio` y `sha256`.",
+                inputSchema: z.object({
+                    urls: urlsSchema.max(MAX_FILES_PER_CALL),
+                    carpeta: z
+                        .string()
+                        .optional()
+                        .describe(
+                            'Ruta absoluta de la carpeta donde guardarlos; se crea si no existe. Ej: "C:\\\\Users\\\\ana\\\\tps\\\\TP5". ' +
+                                "Por defecto, la carpeta de exports de utn-mcp.",
+                        ),
+                }),
+                annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+            },
+            async ({ urls, carpeta }) => {
+                try {
+                    return json(await downloadToDisk(session, urls, carpeta));
+                } catch (e) {
+                    return failure(e);
+                }
+            },
+        );
+    } else {
+        const { outbox, owner } = files;
+        // Los límites se leen al armar el servidor de cada sesión: si cambian en runtime, las sesiones nuevas ya los ven.
+        const { maxOpenPerOwner } = outbox.limits;
+        server.registerTool(
+            "aula_download_file",
+            {
+                description:
+                    DOWNLOAD_INTRO +
+                    `\n\nDevuelve un link de bajada por archivo (\`url\`), que vence en ${ttlText(outbox.limits)} ` +
+                    `(\`vence\` trae la hora) y se puede usar varias veces hasta entonces. Hasta ${maxOpenPerOwner} ` +
+                    "archivos por llamada.\n\n" +
+                    "Cómo hacérselos llegar al usuario:\n" +
+                    "- Si podés ejecutar comandos en la compu del usuario, bajalos vos con el comando de " +
+                    "`conTerminal` de cada uno, en la carpeta donde los va a usar, y decile dónde quedaron.\n" +
+                    "- Si no, o si tus comandos corren en un sandbox remoto (ahí el archivo no le llega), " +
+                    "pasale los `url`: los abre en el navegador, también en el celu, y se descargan.\n\n" +
+                    "Si un link venció, volvé a llamar a esta tool.",
+                inputSchema: z.object({ urls: urlsSchema.max(maxOpenPerOwner) }),
+                annotations: READ_ONLY,
+            },
+            async ({ urls }) => {
+                try {
+                    const oferta = await offerDownloads(session, urls, outbox, owner);
+                    return {
+                        content: [
+                            { type: "text" as const, text: JSON.stringify(oferta) },
+                            // Cada link también como `resource_link`, para los clientes que lo muestran como archivo.
+                            ...oferta.archivos.map((a) => ({
+                                type: "resource_link" as const,
+                                uri: a.url,
+                                name: a.nombre,
+                                mimeType: a.mimeType,
+                                size: a.tamanio,
+                                annotations: { audience: ["user" as const] },
+                            })),
+                        ],
+                    };
                 } catch (e) {
                     return failure(e);
                 }

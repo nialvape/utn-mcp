@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import { ttlText } from "../shared/downloads.js";
 import type { FileSource } from "../shared/uploads.js";
 import type { AutogestionSession } from "./client/session.js";
 import { descargarCertificado, getCertificados, ofrecerCertificado } from "./format/certificados.js";
@@ -137,7 +138,7 @@ export function registerAutogestionTools(server: McpServer, session: Autogestion
             {
                 description:
                     "Descarga un certificado o constancia de la autogestión y devuelve un link para bajarlo. " +
-                    "La `referencia` sale de autogestion_certificados. El link (`url`) vence en 10 minutos y " +
+                    `La \`referencia\` sale de autogestion_certificados. El link (\`url\`) vence en ${ttlText(outbox.limits)} y ` +
                     "se puede usar varias veces hasta entonces; `archivo` es el nombre con el que se guarda.\n\n" +
                     "Cómo hacérselo llegar al usuario:\n" +
                     "- Si podés ejecutar comandos en la compu del usuario, bajalo vos con el comando de " +

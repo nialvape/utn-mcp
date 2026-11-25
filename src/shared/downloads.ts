@@ -13,12 +13,36 @@ interface Download extends DownloadFile {
     expiresAt: number;
 }
 
-/** Cuánto dura un link de bajada, en milisegundos. */
-const DOWNLOAD_TTL_MS = 10 * 60 * 1000;
-/** Tope de un archivo ofrecido, en bytes: queda en memoria hasta que el link vence. */
-export const MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024;
-/** Links abiertos por usuario: con más, se cierra el más viejo. */
-const MAX_OPEN_PER_OWNER = 5;
+/** Los límites de los links de bajada. Se leen en cada uso: cambiarlos en runtime vale para los links que se ofrecen después. */
+export interface DownloadLimits {
+    /** Cuánto dura un link, en milisegundos. */
+    ttlMs: number;
+    /** Tope de un archivo ofrecido, en bytes: queda en memoria hasta que el link vence. */
+    maxBytes: number;
+    /** Links abiertos por usuario: con más, se cierra el más viejo. */
+    maxOpenPerOwner: number;
+}
+
+/** Un número positivo de la variable de entorno; con basura vuelve al default, así no desactiva un tope. */
+function positiveFromEnv(name: string, fallback: number): number {
+    const n = Number(process.env[name] ?? fallback);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+/** Los defaults: UTN_MCP_DOWNLOAD_TTL_MIN (10), UTN_MCP_DOWNLOAD_MAX_MB (10) y UTN_MCP_DOWNLOAD_MAX_OPEN (5). */
+export function downloadLimitsFromEnv(): DownloadLimits {
+    return {
+        ttlMs: positiveFromEnv("UTN_MCP_DOWNLOAD_TTL_MIN", 10) * 60 * 1000,
+        maxBytes: positiveFromEnv("UTN_MCP_DOWNLOAD_MAX_MB", 10) * 1024 * 1024,
+        maxOpenPerOwner: Math.floor(positiveFromEnv("UTN_MCP_DOWNLOAD_MAX_OPEN", 5)) || 1,
+    };
+}
+
+/** El vencimiento en palabras, para las descripciones de las tools ("10 minutos"). */
+export function ttlText(limits: DownloadLimits): string {
+    const min = Math.max(1, Math.round(limits.ttlMs / 60_000));
+    return min === 1 ? "1 minuto" : `${min} minutos`;
+}
 
 /**
  * Links para que el usuario baje un archivo que armó el servidor, en modo HTTP, donde el disco del
@@ -30,16 +54,36 @@ const MAX_OPEN_PER_OWNER = 5;
 export class DownloadOutbox {
     private readonly downloads = new Map<string, Download>();
 
-    constructor(private readonly baseUrl: string) {}
+    private current: DownloadLimits;
+
+    constructor(
+        private readonly baseUrl: string,
+        limits: DownloadLimits = downloadLimitsFromEnv(),
+    ) {
+        this.current = { ...limits };
+    }
+
+    get limits(): Readonly<DownloadLimits> {
+        return this.current;
+    }
+
+    /** Cambia los límites en caliente (por ejemplo, según la demanda); los links ya ofrecidos conservan su vencimiento. */
+    setLimits(patch: Partial<DownloadLimits>) {
+        for (const [key, value] of Object.entries(patch)) {
+            if (!Number.isFinite(value) || (value as number) <= 0) throw new Error(`Límite inválido para ${key}: ${value}`);
+        }
+        this.current = { ...this.current, ...patch };
+    }
 
     offer(owner: string, file: DownloadFile) {
-        if (file.bytes.length > MAX_DOWNLOAD_BYTES) throw new Error("El archivo es demasiado grande para un link de bajada.");
+        const { ttlMs, maxBytes, maxOpenPerOwner } = this.current;
+        if (file.bytes.length > maxBytes) throw new Error("El archivo es demasiado grande para un link de bajada.");
         this.sweep();
         // El Map conserva el orden de inserción: el primero que aparece es el más viejo.
         const own = [...this.downloads].filter(([, d]) => d.owner === owner);
-        for (const [oldId] of own.slice(0, Math.max(0, own.length - MAX_OPEN_PER_OWNER + 1))) this.downloads.delete(oldId);
+        for (const [oldId] of own.slice(0, Math.max(0, own.length - maxOpenPerOwner + 1))) this.downloads.delete(oldId);
         const id = randomBytes(24).toString("base64url");
-        const expiresAt = Date.now() + DOWNLOAD_TTL_MS;
+        const expiresAt = Date.now() + ttlMs;
         this.downloads.set(id, { ...file, owner, expiresAt });
         return { url: `${this.baseUrl}/bajar/${id}`, expiresAt: new Date(expiresAt).toISOString() };
     }
